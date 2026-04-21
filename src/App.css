@@ -1,0 +1,151 @@
+.app { display: flex; flex-direction: column; min-height: 100vh; }
+
+.app-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 28px;
+  background: #161926;
+  border-bottom: 1px solid #2a2d3e;
+}
+
+.app-brand { font-size: 16px; font-weight: 700; color: #7c6af7; letter-spacing: 0.3px; }
+
+.app-user { display: flex; align-items: center; gap: 12px; }
+.user-email { font-size: 13px; color: #94a3b8; }
+
+.app-nav {
+  display: flex; gap: 4px; padding: 12px 28px 0;
+  background: #161926;
+  border-bottom: 1px solid #2a2d3e;
+}
+
+.nav-tab {
+  padding: 10px 22px; border: none; background: transparent;
+  color: #94a3b8; font-size: 14px; font-weight: 500;
+  border-bottom: 2px solid transparent; cursor: pointer;
+  transition: all 0.15s;
+}
+.nav-tab:hover { color: #e2e8f0; }
+.nav-tab.active { color: #7c6af7; border-bottom-color: #7c6af7; }
+
+.app-main { flex: 1; padding: 28px; max-width: 920px; margin: 0 auto; width: 100%; }
+
+/* ── Shared UI ── */
+.card {
+  background: #161926; border: 1px solid #2a2d3e;
+  border-radius: 10px; padding: 20px; margin-bottom: 16px;
+}
+.card-title { font-size: 14px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 14px; }
+
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-start; }
+.col { display: flex; flex-direction: column; gap: 10px; }
+
+.input {
+  background: #0f1117; border: 1px solid #2a2d3e; color: #e2e8f0;
+  border-radius: 7px; padding: 9px 13px; font-size: 14px; width: 100%;
+  outline: none; transition: border-color 0.15s;
+}
+.input:focus { border-color: #7c6af7; }
+.input-sm { max-width: 280px; }
+
+.textarea {
+  background: #0f1117; border: 1px solid #2a2d3e; color: #e2e8f0;
+  border-radius: 7px; padding: 10px 13px; font-size: 14px; width: 100%;
+  outline: none; resize: vertical; min-height: 80px; transition: border-color 0.15s;
+}
+.textarea:focus { border-color: #7c6af7; }
+
+.select {
+  background: #0f1117; border: 1px solid #2a2d3e; color: #e2e8f0;
+  border-radius: 7px; padding: 9px 13px; font-size: 14px;
+  outline: none; cursor: pointer;
+}
+
+.btn {
+  padding: 9px 18px; border-radius: 7px; font-size: 14px; font-weight: 500;
+  border: none; transition: opacity 0.15s; white-space: nowrap;
+}
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-primary { background: #7c6af7; color: #fff; }
+.btn-primary:hover:not(:disabled) { background: #6b59e6; }
+.btn-danger  { background: #ef4444; color: #fff; }
+.btn-danger:hover:not(:disabled)  { background: #dc2626; }
+.btn-outline { background: transparent; color: #94a3b8; border: 1px solid #2a2d3e; }
+.btn-outline:hover:not(:disabled) { border-color: #7c6af7; color: #7c6af7; }
+.btn-ghost   { background: transparent; border: none; color: #94a3b8; font-size: 13px; padding: 4px 8px; }
+.btn-ghost:hover { color: #e2e8f0; }
+.btn-sm { padding: 6px 14px; font-size: 13px; }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 500;
+}
+.badge-green  { background: #14532d33; color: #4ade80; border: 1px solid #4ade8033; }
+.badge-red    { background: #7f1d1d33; color: #f87171; border: 1px solid #f8717133; }
+.badge-yellow { background: #78350f33; color: #fbbf24; border: 1px solid #fbbf2433; }
+.badge-gray   { background: #1e293b;   color: #94a3b8; border: 1px solid #2a2d3e; }
+
+.dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+.label { font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
+
+.divider { border: none; border-top: 1px solid #2a2d3e; margin: 18px 0; }
+
+.response-box {
+  background: #0f1117; border: 1px solid #2a2d3e; border-radius: 7px;
+  padding: 14px; font-size: 13px; line-height: 1.7; color: #cbd5e1;
+  white-space: pre-wrap; word-break: break-word; max-height: 380px; overflow-y: auto;
+}
+
+.err { color: #f87171; font-size: 13px; margin-top: 6px; }
+.ok  { color: #4ade80; font-size: 13px; margin-top: 6px; }
+
+.report-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: #7c6af7; font-size: 13px; text-decoration: none;
+}
+.report-link:hover { text-decoration: underline; }
+
+.accounts-grid { display: flex; flex-direction: column; gap: 8px; }
+.account-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; background: #0f1117; border: 1px solid #2a2d3e;
+  border-radius: 7px; cursor: pointer; transition: border-color 0.15s;
+}
+.account-item:hover { border-color: #7c6af7; }
+.account-item.selected { border-color: #7c6af7; background: #7c6af711; }
+.account-item input[type=checkbox] { accent-color: #7c6af7; width: 15px; height: 15px; }
+.account-name { font-size: 14px; font-weight: 500; }
+.account-meta { font-size: 12px; color: #64748b; margin-top: 2px; }
+
+.report-list { display: flex; flex-direction: column; gap: 8px; }
+.report-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; background: #0f1117; border: 1px solid #2a2d3e; border-radius: 7px;
+}
+.report-query { font-size: 13px; color: #e2e8f0; flex: 1; }
+.report-date  { font-size: 12px; color: #64748b; }
+
+.spinner {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 2px solid #2a2d3e; border-top-color: #7c6af7;
+  animation: spin 0.6s linear infinite; display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.platform-tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+.platform-tab {
+  padding: 8px 22px; border-radius: 7px; font-size: 14px; font-weight: 500;
+  border: 1px solid #2a2d3e; background: transparent; color: #94a3b8; cursor: pointer;
+  transition: all 0.15s;
+}
+.platform-tab:hover { border-color: #7c6af7; color: #7c6af7; }
+.platform-tab.active { background: #7c6af7; border-color: #7c6af7; color: #fff; }
+
+.toast {
+  position: fixed; bottom: 24px; right: 24px; z-index: 999;
+  padding: 12px 18px; border-radius: 8px; font-size: 13px; font-weight: 500;
+  max-width: 340px; animation: slideIn 0.2s ease;
+}
+.toast-success { background: #14532d; color: #4ade80; border: 1px solid #4ade8033; }
+.toast-error   { background: #7f1d1d; color: #f87171; border: 1px solid #f8717133; }
+@keyframes slideIn { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
