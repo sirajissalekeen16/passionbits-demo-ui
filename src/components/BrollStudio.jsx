@@ -959,6 +959,10 @@ export default function BrollStudio({ email = '' }) {
   const [v2Loading, setV2Loading] = useState(false)
   const ignoredQueriesRef = useRef([])  // accumulates across Generate More calls
 
+  // Persistent history — past v2 runs + past final rendered videos
+  const [pastV2Runs, setPastV2Runs] = useState([])
+  const [pastGenerated, setPastGenerated] = useState([])
+
   useEffect(() => {
     broll.brollTypes()
       .then(res => { if (res?.success && Array.isArray(res.data)) setBrollTypesList(res.data) })
@@ -972,8 +976,27 @@ export default function BrollStudio({ email = '' }) {
       .catch(() => {})
   }, [email])
 
-  // Track pending job_ids so the socket handler can route results
-  const pendingJobs = useRef({})  // { job_id -> 'broll' | 'meme' | 'user' | 'v2' }
+  // Load past v2 runs + past generated videos on mount / email change.
+  // This guarantees the user always sees prior work even after a hard refresh.
+  useEffect(() => {
+    if (!email) return
+    broll.recommendationRuns(email, { recommendType: 'broll_v2', limit: 10 })
+      .then(res => {
+        const runs = res?.data?.runs || []
+        setPastV2Runs(runs.filter(r => r.status === 'done' && Array.isArray(r.templates)))
+      })
+      .catch(() => {})
+    broll.myGenerated(email, { limit: 50 })
+      .then(res => {
+        const vids = res?.data?.videos || []
+        setPastGenerated(vids)
+      })
+      .catch(() => {})
+  }, [email])
+
+  // Track pending job_ids so the socket handler can route results.
+  // Value shape: { type: 'broll' | 'meme' | 'user' | 'v2', gotPartial?: boolean }
+  const pendingJobs = useRef({})
 
   // Socket listener — join email room once, handle broll_recommend_ready events
   useEffect(() => {
@@ -981,35 +1004,75 @@ export default function BrollStudio({ email = '' }) {
     joinRoom(email)
     const sock = getSocket()
 
-    function handleProgress(payload) {
-      if (payload?.event !== 'broll_recommend_ready') return
-      const { job_id, status, templates, suggested_music, search_queries_used } = payload.data || {}
-      const type = pendingJobs.current[job_id]
+    function handleRecommendReady(payload) {
+      const { job_id, status, templates, template, suggested_music, search_queries_used } = payload.data || {}
+      const entry = pendingJobs.current[job_id]
+      // Route even if we missed the outbound POST (e.g. page reload): treat any v2
+      // event as a v2 stream so videos still render.
+      const recommendType = payload.data?.recommend_type
+      const type = entry?.type || (recommendType === 'broll_v2' ? 'v2' : null)
       if (!type) return
-      delete pendingJobs.current[job_id]
 
-      if (type === 'broll') { setBrollLoading(false); if (status === 'done') setBrollTemplates(templates || []) }
-      if (type === 'meme')  { setMemeLoading(false);  if (status === 'done') setMemeTemplates(templates || []) }
-      if (type === 'user')  { setUserLoading(false);  if (status === 'done') setUserTemplates(templates || []) }
-      if (type === 'v2') {
-        setV2Loading(false)
-        if (status === 'done') {
-          setV2Templates(templates || [])
-          if (Array.isArray(search_queries_used)) {
-            ignoredQueriesRef.current = Array.from(new Set([
-              ...(ignoredQueriesRef.current || []),
-              ...search_queries_used,
-            ]))
+      // --- Partial (v2 only) ------------------------------------------------
+      if (status === 'partial' && template && type === 'v2') {
+        setV2Loading(false)  // first partial → flip off the spinner, show cards
+        setV2Templates(prev => {
+          if (prev.some(t => t.id === template.id)) return prev
+          return [...prev, template]
+        })
+        if (entry) entry.gotPartial = true
+        return  // don't delete — more events still coming
+      }
+
+      // --- Queries-ready is informational; don't clear state ---------------
+      if (status === 'queries_ready') {
+        return
+      }
+
+      // --- Terminal events (done / failed) ---------------------------------
+      if (status === 'done' || status === 'failed') {
+        delete pendingJobs.current[job_id]
+        if (type === 'broll') { setBrollLoading(false); if (status === 'done') setBrollTemplates(templates || []) }
+        if (type === 'meme')  { setMemeLoading(false);  if (status === 'done') setMemeTemplates(templates || []) }
+        if (type === 'user')  { setUserLoading(false);  if (status === 'done') setUserTemplates(templates || []) }
+        if (type === 'v2') {
+          setV2Loading(false)
+          if (status === 'done') {
+            // Replace with the fully-captioned payload from Inference 2.
+            // If we never got a partial (e.g. direct done), this is also a clean
+            // render of the full batch.
+            setV2Templates(templates || [])
+            if (Array.isArray(search_queries_used)) {
+              ignoredQueriesRef.current = Array.from(new Set([
+                ...(ignoredQueriesRef.current || []),
+                ...search_queries_used,
+              ]))
+            }
           }
         }
-      }
 
-      // Auto-suggest music if none selected yet
-      if (suggested_music?.id && !selectedMusic) {
-        setSelectedMusic(suggested_music)
-        setMusicStart(0)
-        setMusicDuration(null)
+        // Auto-suggest music if none selected yet
+        if (suggested_music?.id && !selectedMusic) {
+          setSelectedMusic(suggested_music)
+          setMusicStart(0)
+          setMusicDuration(null)
+        }
       }
+    }
+
+    function handleOutputReady(payload) {
+      const { job_id, status, url, caption } = payload.data || {}
+      if (status === 'done' && url) {
+        setPastGenerated(prev => {
+          if (prev.some(v => v.id === job_id)) return prev
+          return [{ id: job_id, url, caption, status: 'done', completed_at: new Date().toISOString() }, ...prev]
+        })
+      }
+    }
+
+    function handleProgress(payload) {
+      if (payload?.event === 'broll_recommend_ready') return handleRecommendReady(payload)
+      if (payload?.event === 'broll_output_ready')    return handleOutputReady(payload)
     }
 
     sock.on('live_progress', handleProgress)
@@ -1033,21 +1096,21 @@ export default function BrollStudio({ email = '' }) {
 
     broll.recommendOriginal(email, context.trim())
       .then(res => {
-        if (res?.data?.job_id) pendingJobs.current[res.data.job_id] = 'broll'
+        if (res?.data?.job_id) pendingJobs.current[res.data.job_id] = { type: 'broll' }
         else setBrollLoading(false)
       })
       .catch(() => setBrollLoading(false))
 
     broll.recommendMemeOriginal(email, context.trim())
       .then(res => {
-        if (res?.data?.job_id) pendingJobs.current[res.data.job_id] = 'meme'
+        if (res?.data?.job_id) pendingJobs.current[res.data.job_id] = { type: 'meme' }
         else setMemeLoading(false)
       })
       .catch(() => setMemeLoading(false))
 
     broll.recommendUserGivenOriginal(email, context.trim())
       .then(res => {
-        if (res?.data?.job_id) pendingJobs.current[res.data.job_id] = 'user'
+        if (res?.data?.job_id) pendingJobs.current[res.data.job_id] = { type: 'user' }
         else setUserLoading(false)
       })
       .catch(() => setUserLoading(false))
@@ -1074,7 +1137,7 @@ export default function BrollStudio({ email = '' }) {
         count: 6,
         ignoreQueries: reset ? [] : ignoredQueriesRef.current,
       })
-      if (res?.data?.job_id) pendingJobs.current[res.data.job_id] = 'v2'
+      if (res?.data?.job_id) pendingJobs.current[res.data.job_id] = { type: 'v2' }
       else { setV2Loading(false); setErr(res?.message || 'Failed to start v2 job') }
     } catch (e) {
       setV2Loading(false)
@@ -1137,6 +1200,33 @@ export default function BrollStudio({ email = '' }) {
           </div>
         </div>
       </div>
+
+      {/* ── My Generated Videos (persistent history) ── */}
+      {pastGenerated.length > 0 && (
+        <div className="card" style={{ marginTop: 8 }}>
+          <div className="card-title">My Generated Videos ({pastGenerated.length})</div>
+          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>
+            Past renders from <code>get-output</code>. Updates live when a new render finishes.
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
+            {pastGenerated.map(v => (
+              <div key={v.id} style={{ border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden', background: '#fff' }}>
+                {v.url
+                  ? <video src={v.url} controls playsInline style={{ width: '100%', aspectRatio: '9/16', objectFit: 'cover', background: '#000' }} />
+                  : (
+                    <div style={{ width: '100%', aspectRatio: '9/16', display: 'grid', placeItems: 'center', color: '#94a3b8', fontSize: 12, background: '#f8fafc' }}>
+                      {v.status === 'failed' ? `Failed${v.error ? `: ${v.error}` : ''}` : 'Processing…'}
+                    </div>
+                  )
+                }
+                {v.caption && (
+                  <div style={{ padding: '8px 10px', fontSize: 11, color: '#334155', lineHeight: 1.4, maxHeight: 64, overflow: 'hidden' }}>{v.caption}</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Live Pexels Pipeline (v2) ── */}
       <div className="card" style={{ marginTop: 8 }}>

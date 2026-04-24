@@ -160,6 +160,17 @@ export const broll = {
     }),
   brollTypes: () => req('GET', '/broll-templates/broll-types'),
   myBrandProducts: (email) => req('GET', `/broll-templates/my-brand-products?email=${encodeURIComponent(email)}`),
+  // Persistent history — load on mount so the UI always shows prior work
+  recommendationRuns: (email, { recommendType = null, offset = 0, limit = 20 } = {}) => {
+    const p = new URLSearchParams({ user_email: email, offset: String(offset), limit: String(limit) })
+    if (recommendType) p.set('recommend_type', recommendType)
+    return req('GET', `/broll-templates/recommendation-runs?${p.toString()}`)
+  },
+  myGenerated: (email, { status = null, offset = 0, limit = 50 } = {}) => {
+    const p = new URLSearchParams({ email, offset: String(offset), limit: String(limit) })
+    if (status) p.set('status', status)
+    return req('GET', `/broll-templates/my-generated?${p.toString()}`)
+  },
 }
 
 // ── Music ────────────────────────────────────────────────────────────────────
