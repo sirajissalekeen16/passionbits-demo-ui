@@ -950,9 +950,30 @@ export default function BrollStudio({ email = '' }) {
   const [musicStart, setMusicStart]       = useState(0)
   const [musicDuration, setMusicDuration] = useState(null)
 
+  // v2 pipeline state
+  const [brollTypesList, setBrollTypesList] = useState([])
+  const [selectedBrollType, setSelectedBrollType] = useState('cinematic_aesthetic')
+  const [brandProducts, setBrandProducts] = useState([])
+  const [selectedProductIds, setSelectedProductIds] = useState([])  // [] means all
+  const [v2Templates, setV2Templates] = useState([])
+  const [v2Loading, setV2Loading] = useState(false)
+  const ignoredQueriesRef = useRef([])  // accumulates across Generate More calls
+
+  useEffect(() => {
+    broll.brollTypes()
+      .then(res => { if (res?.success && Array.isArray(res.data)) setBrollTypesList(res.data) })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (!email) return
+    broll.myBrandProducts(email)
+      .then(res => { if (res?.success && Array.isArray(res.data?.products)) setBrandProducts(res.data.products) })
+      .catch(() => {})
+  }, [email])
 
   // Track pending job_ids so the socket handler can route results
-  const pendingJobs = useRef({})  // { job_id -> 'broll' | 'meme' | 'user' }
+  const pendingJobs = useRef({})  // { job_id -> 'broll' | 'meme' | 'user' | 'v2' }
 
   // Socket listener — join email room once, handle broll_recommend_ready events
   useEffect(() => {
@@ -962,7 +983,7 @@ export default function BrollStudio({ email = '' }) {
 
     function handleProgress(payload) {
       if (payload?.event !== 'broll_recommend_ready') return
-      const { job_id, status, templates, suggested_music } = payload.data || {}
+      const { job_id, status, templates, suggested_music, search_queries_used } = payload.data || {}
       const type = pendingJobs.current[job_id]
       if (!type) return
       delete pendingJobs.current[job_id]
@@ -970,6 +991,18 @@ export default function BrollStudio({ email = '' }) {
       if (type === 'broll') { setBrollLoading(false); if (status === 'done') setBrollTemplates(templates || []) }
       if (type === 'meme')  { setMemeLoading(false);  if (status === 'done') setMemeTemplates(templates || []) }
       if (type === 'user')  { setUserLoading(false);  if (status === 'done') setUserTemplates(templates || []) }
+      if (type === 'v2') {
+        setV2Loading(false)
+        if (status === 'done') {
+          setV2Templates(templates || [])
+          if (Array.isArray(search_queries_used)) {
+            ignoredQueriesRef.current = Array.from(new Set([
+              ...(ignoredQueriesRef.current || []),
+              ...search_queries_used,
+            ]))
+          }
+        }
+      }
 
       // Auto-suggest music if none selected yet
       if (suggested_music?.id && !selectedMusic) {
@@ -1020,6 +1053,41 @@ export default function BrollStudio({ email = '' }) {
       .catch(() => setUserLoading(false))
   }
 
+  async function handleFindV2({ reset = true } = {}) {
+    if (!email.trim()) {
+      setErr('No email — go back and log in.')
+      return
+    }
+    setErr('')
+    setHasResults(true)
+    if (reset) {
+      setV2Templates([])
+      ignoredQueriesRef.current = []
+    }
+    setV2Loading(true)
+
+    try {
+      const res = await broll.recommendV2(email, {
+        brollType: selectedBrollType,
+        productIds: selectedProductIds,
+        context: context.trim(),
+        count: 6,
+        ignoreQueries: reset ? [] : ignoredQueriesRef.current,
+      })
+      if (res?.data?.job_id) pendingJobs.current[res.data.job_id] = 'v2'
+      else { setV2Loading(false); setErr(res?.message || 'Failed to start v2 job') }
+    } catch (e) {
+      setV2Loading(false)
+      setErr(e?.message || 'Failed to start v2 job')
+    }
+  }
+
+  function toggleProduct(id) {
+    setSelectedProductIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    )
+  }
+
   async function handleUpload() {
     if (!uploadFile) return
     setUploading(true)
@@ -1066,6 +1134,81 @@ export default function BrollStudio({ email = '' }) {
                 ? <><span className="spinner" style={{ width: 14, height: 14, marginRight: 8 }} />Finding…</>
                 : hasResults ? 'Refresh' : 'Find Templates'}
             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Live Pexels Pipeline (v2) ── */}
+      <div className="card" style={{ marginTop: 8 }}>
+        <div className="card-title">Live Pexels Pipeline (v2)</div>
+        <div className="col" style={{ gap: 14 }}>
+          <div style={{ fontSize: 12, color: '#64748b' }}>
+            Generates fresh Pexels clips tailored to an ad style + selected products. Captions
+            and music are picked per-video by a second LLM pass.
+          </div>
+
+          <div>
+            <div className="label">Ad Type</div>
+            <select
+              className="input"
+              value={selectedBrollType}
+              onChange={e => setSelectedBrollType(e.target.value)}
+              style={{ width: '100%', padding: '8px 10px' }}
+            >
+              {brollTypesList.length === 0
+                ? <option value="cinematic_aesthetic">Cinematic Aesthetic</option>
+                : brollTypesList.map(t => (
+                    <option key={t.id} value={t.id}>{t.label}</option>
+                  ))
+              }
+            </select>
+            {brollTypesList.find(t => t.id === selectedBrollType)?.hint && (
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+                {brollTypesList.find(t => t.id === selectedBrollType).hint}
+              </div>
+            )}
+          </div>
+
+          {brandProducts.length > 0 && (
+            <div>
+              <div className="label">Products <span style={{ color: '#64748b' }}>(leave blank = all)</span></div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {brandProducts.map(p => (
+                  <label
+                    key={p.id}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '4px 10px', borderRadius: 14,
+                      border: '1px solid',
+                      borderColor: selectedProductIds.includes(p.id) ? '#6366f1' : '#2a2d3e',
+                      background: selectedProductIds.includes(p.id) ? 'rgba(99,102,241,0.15)' : 'transparent',
+                      fontSize: 12, cursor: 'pointer', color: '#cbd5e1',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedProductIds.includes(p.id)}
+                      onChange={() => toggleProduct(p.id)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    {p.name || p.id}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-primary" onClick={() => handleFindV2({ reset: true })} disabled={v2Loading || !email}>
+              {v2Loading
+                ? <><span className="spinner" style={{ width: 14, height: 14, marginRight: 8 }} />Generating…</>
+                : v2Templates.length > 0 ? 'Refresh v2' : 'Find Templates (v2)'}
+            </button>
+            {v2Templates.length > 0 && (
+              <button className="btn btn-outline" onClick={() => handleFindV2({ reset: false })} disabled={v2Loading}>
+                Generate More
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1170,6 +1313,28 @@ export default function BrollStudio({ email = '' }) {
       {/* ── Results ── */}
       {hasResults && (
         <div style={{ marginTop: 4 }}>
+
+          {/* V2 Pipeline Results */}
+          {(v2Loading || v2Templates.length > 0) && (
+            <div style={{ marginBottom: 20 }}>
+              {v2Loading && v2Templates.length === 0
+                ? <div style={{ color: '#64748b', fontSize: 13 }}><span className="spinner" style={{ width: 12, height: 12, marginRight: 8 }} />Generating fresh Pexels clips…</div>
+                : (
+                  <>
+                    <TemplateSection
+                      title="Live Pexels (v2)"
+                      templates={v2Templates}
+                      fonts={fonts}
+                      userEmail={email}
+                      waitForOutput={waitForOutput}
+                      music={selectedMusic ? { id: selectedMusic.id, startSeconds: musicStart, durationSeconds: musicDuration } : null}
+                    />
+                    <hr className="divider" />
+                  </>
+                )
+              }
+            </div>
+          )}
 
           {/* User Uploaded Templates */}
           <div style={{ marginBottom: 20 }}>

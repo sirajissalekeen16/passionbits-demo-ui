@@ -21,6 +21,8 @@ Deploy `dist/` to `/var/www/passionbits-ui/` (served by Nginx).
 
 ## B-Roll Studio Integration
 
+> **New:** B-Roll Pipeline v2 (two-inference, live Pexels, per-template captions + music) is documented separately in [`docs/broll-pipeline-v2-api-guide.md`](./docs/broll-pipeline-v2-api-guide.md).
+
 ### Overview
 
 B-Roll Studio lets users generate captioned social videos from template clips. The flow:
@@ -356,6 +358,9 @@ See [`docs/api-reference.md`](./docs/api-reference.md) for the complete endpoint
 | `outputStatus(jobId)` | `GET /broll-templates/output-status/{jobId}` | Poll job status |
 | `captionOptions()` | `GET /broll-templates/caption-options` | Available fonts |
 | `myTemplates(email)` | `GET /broll-templates/my-templates` | User's uploaded templates |
+| `recommendV2(email, { brollType, productIds, context, count, ignoreQueries })` | `POST /broll-templates/recommend-v2` | **v2** two-inference pipeline (async → socket) |
+| `brollTypes()` | `GET /broll-templates/broll-types` | **v2** 20 ad-type labels for dropdown |
+| `myBrandProducts(email)` | `GET /broll-templates/my-brand-products` | **v2** brand + product list for checkboxes |
 
 #### `music.*`
 
@@ -363,6 +368,7 @@ See [`docs/api-reference.md`](./docs/api-reference.md) for the complete endpoint
 |---|---|---|
 | `list({ mood, genre, email, source, limit })` | `GET /music` | List tracks with filters |
 | `upload(file, email, title, description, mood, genre)` | `POST /music/upload` | Upload audio track |
+| `byId(id)` | `GET /music/{id}` | **v2** fetch single track for per-card playback |
 
 #### `slideshow.*`
 

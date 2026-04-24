@@ -31,6 +31,28 @@ export const metaAds = {
   listPdfReports: (email) => req('GET', `/meta-ads/reports/markdown?email=${encodeURIComponent(email)}`),
   listHtmlReports:(email) => req('GET', `/meta-ads/reports/html?email=${encodeURIComponent(email)}`),
   listOverall:    (email) => req('GET', `/meta-ads/overall-reports?email=${encodeURIComponent(email)}`),
+
+  // Account KPIs + avg hook/hold/click/buy + daily graph
+  accountSummary: (email, { accountId, datePreset = 'last_30d', minSpend = 0, includeGraph = true } = {}) => {
+    const p = new URLSearchParams({ email, date_preset: datePreset, min_spend: String(minSpend), include_graph: String(includeGraph) })
+    if (accountId) p.set('account_id', accountId)
+    return req('GET', `/meta-ads/account/summary?${p.toString()}`)
+  },
+
+  // Per-ad table — sortable by any score / metric
+  accountAds: (email, { accountId, sortBy = 'overall_score', order = 'desc', page = 1, pageSize = 20, minSpend = 0, includeRecent = true } = {}) => {
+    const p = new URLSearchParams({
+      email,
+      sort_by: sortBy,
+      order,
+      page: String(page),
+      page_size: String(pageSize),
+      min_spend: String(minSpend),
+      include_recent: String(includeRecent),
+    })
+    if (accountId) p.set('account_id', accountId)
+    return req('GET', `/meta-ads/account/ads?${p.toString()}`)
+  },
 }
 
 // ── Instagram OAuth ──────────────────────────────────────────────────────────
@@ -126,6 +148,18 @@ export const broll = {
     req('POST', '/broll-templates/recommend-meme-original', { user_email: email, context, start, end }),
   recommendUserGivenOriginal: (email, context = '', start = 1, end = 10) =>
     req('POST', '/broll-templates/recommend-user-given-original', { user_email: email, context, start, end }),
+  // ── v2: two-inference pipeline with live Pexels ingest ───────────────────
+  recommendV2: (email, { brollType, productIds = [], context = '', count = 6, ignoreQueries = null } = {}) =>
+    req('POST', '/broll-templates/recommend-v2', {
+      user_email: email,
+      broll_type: brollType,
+      product_ids: productIds,
+      context,
+      count,
+      ...(ignoreQueries != null ? { ignore_queries: ignoreQueries } : {}),
+    }),
+  brollTypes: () => req('GET', '/broll-templates/broll-types'),
+  myBrandProducts: (email) => req('GET', `/broll-templates/my-brand-products?email=${encodeURIComponent(email)}`),
 }
 
 // ── Music ────────────────────────────────────────────────────────────────────
@@ -148,6 +182,7 @@ export const music = {
     if (genre) fd.append('genre', genre)
     return fetch(BASE + '/music/upload', { method: 'POST', body: fd }).then(r => r.json())
   },
+  byId: (id) => req('GET', `/music/${encodeURIComponent(id)}`),
 }
 
 // ── Slideshow ────────────────────────────────────────────────────────────────
