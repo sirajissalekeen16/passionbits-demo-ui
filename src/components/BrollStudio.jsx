@@ -315,6 +315,33 @@ function CaptionStylePanel({ style, onChange, fonts, onResetPosition }) {
   )
 }
 
+// ── Per-card music strip: mood + title + inline <audio> ──────────────────────
+function TemplateMusicRow({ music, musicId }) {
+  const [track, setTrack] = useState(music || null)
+  const [loading, setLoading] = useState(false)
+  useEffect(() => {
+    if (music?.file_url) { setTrack(music); return }
+    if (!musicId) return
+    setLoading(true)
+    musicApi.byId(musicId)
+      .then(res => { if (res?.success && res?.data?.music) setTrack(res.data.music) })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [musicId, music?.file_url])
+
+  if (!track && !loading) return null
+  return (
+    <div style={{ padding: '4px 10px 0' }}>
+      <div style={{ fontSize: 10, color: '#6366f1', fontWeight: 600, marginBottom: 2 }}>
+        {loading ? 'Loading music…' : `${track?.mood || 'Music'} · ${(track?.title || '').slice(0, 28)}`}
+      </div>
+      {track?.file_url && (
+        <audio controls preload="none" src={track.file_url} style={{ width: '100%', height: 24 }} />
+      )}
+    </div>
+  )
+}
+
 // ── Per-template card (controlled caption from parent) ─────────────────────────
 function TemplateCard({ template, caption, onCaptionChange, fonts, userEmail, waitForOutput, music }) {
   const [generating, setGenerating] = useState(false)
@@ -404,8 +431,18 @@ function TemplateCard({ template, caption, onCaptionChange, fonts, userEmail, wa
         </div>
       )}
 
+      {/* Per-card music (LLM-picked) */}
+      {(template.music?.file_url || template.music_id) && (
+        <TemplateMusicRow music={template.music} musicId={template.music_id} />
+      )}
+
       {/* Caption textarea — controlled */}
       <div style={{ padding: '8px 10px 0' }}>
+        {!caption && (
+          <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span className="spinner" style={{ width: 10, height: 10 }} /> Generating caption…
+          </div>
+        )}
         <textarea
           className="textarea"
           rows={2}
@@ -553,11 +590,24 @@ function TemplateSection({ title, templates, fonts, userEmail, waitForOutput, mu
   const [genAllOutputs, setGenAllOutputs] = useState({})
   const [genAllErr, setGenAllErr] = useState('')
 
-  // Re-initialise captions when templates change
+  // Sync captions from templates when they arrive / update.
+  // This MERGES so a user's in-progress edit isn't wiped by a late partial,
+  // and an empty-string caption (placeholder during streaming) never overwrites
+  // the real caption that comes from a later partial update.
   useEffect(() => {
-    setCaptions(Object.fromEntries(templates.map(t => [t.id, t.caption || ''])))
-    setGenAllOutputs({})
-    setGenAllErr('')
+    setCaptions(prev => {
+      const next = { ...prev }
+      for (const t of templates) {
+        const existing = next[t.id]
+        const incoming = t.caption || ''
+        // Keep existing value unless:
+        //   - we've never seen this template (seed with incoming)
+        //   - incoming is non-empty AND existing is empty (caption just arrived)
+        if (existing === undefined) next[t.id] = incoming
+        else if (!existing && incoming) next[t.id] = incoming
+      }
+      return next
+    })
   }, [templates])
 
   function setCaption(id, value) {
@@ -916,7 +966,9 @@ export default function BrollStudio({ email = '' }) {
 
   // ── Poll /output-status/{job_id} until done or failed ──────────────────────
   async function waitForOutput(job_id) {
-    const maxAttempts = 60   // 60 × 3 s = 3 minutes
+    // ffmpeg + S3 upload can exceed 3 min on long clips with music loops,
+    // especially when rendering on a shared worker. 5 min with 3 s polling.
+    const maxAttempts = 100  // 100 × 3 s = 5 minutes
     const interval    = 3000
     for (let i = 0; i < maxAttempts; i++) {
       await new Promise(r => setTimeout(r, interval))
@@ -1014,11 +1066,31 @@ export default function BrollStudio({ email = '' }) {
       if (!type) return
 
       // --- Partial (v2 only) ------------------------------------------------
+      //
+      // Two kinds of partials can arrive per template:
+      //   1. Video ingested  → caption: "" (placeholder), default music
+      //   2. Caption resolved → full caption + LLM-picked music
+      // Both use the same template.id, so we UPDATE in place rather than
+      // append — otherwise the caption-only update would overwrite the video
+      // row or create a duplicate.
       if (status === 'partial' && template && type === 'v2') {
         setV2Loading(false)  // first partial → flip off the spinner, show cards
         setV2Templates(prev => {
-          if (prev.some(t => t.id === template.id)) return prev
-          return [...prev, template]
+          const idx = prev.findIndex(t => t.id === template.id)
+          if (idx === -1) return [...prev, template]
+          const next = prev.slice()
+          // Merge so fields from either partial don't overwrite each other with
+          // empty strings (e.g. caption='' from video-ingest must not clobber
+          // an existing caption from a prior caption-ready partial).
+          const existing = prev[idx]
+          next[idx] = {
+            ...existing,
+            ...template,
+            caption: template.caption || existing.caption || '',
+            music_id: template.music_id || existing.music_id || null,
+            music: template.music || existing.music || null,
+          }
+          return next
         })
         if (entry) entry.gotPartial = true
         return  // don't delete — more events still coming
