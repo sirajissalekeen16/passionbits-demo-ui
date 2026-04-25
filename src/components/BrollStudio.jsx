@@ -1014,6 +1014,8 @@ export default function BrollStudio({ email = '' }) {
   // Persistent history — past v2 runs + past final rendered videos
   const [pastV2Runs, setPastV2Runs] = useState([])
   const [pastGenerated, setPastGenerated] = useState([])
+  const [pastV2Status, setPastV2Status] = useState('idle')  // 'loading' | 'ok' | 'error' | 'empty' | 'idle'
+  const [pastV2Err, setPastV2Err] = useState('')
 
   useEffect(() => {
     broll.brollTypes()
@@ -1032,18 +1034,33 @@ export default function BrollStudio({ email = '' }) {
   // This guarantees the user always sees prior work even after a hard refresh.
   useEffect(() => {
     if (!email) return
+    setPastV2Status('loading')
+    setPastV2Err('')
     broll.recommendationRuns(email, { recommendType: 'broll_v2', limit: 10 })
       .then(res => {
+        if (!res?.success) {
+          setPastV2Status('error')
+          setPastV2Err(res?.message || `HTTP ${res?.statusCode || '?'}`)
+          console.warn('[broll-v2] recommendationRuns failed:', res)
+          return
+        }
         const runs = res?.data?.runs || []
-        setPastV2Runs(runs.filter(r => r.status === 'done' && Array.isArray(r.templates)))
+        const filtered = runs.filter(r => r.status === 'done' && Array.isArray(r.templates))
+        console.log(`[broll-v2] loaded ${filtered.length} past v2 runs (of ${runs.length} total)`, runs)
+        setPastV2Runs(filtered)
+        setPastV2Status(filtered.length === 0 ? 'empty' : 'ok')
       })
-      .catch(() => {})
+      .catch(e => {
+        setPastV2Status('error')
+        setPastV2Err(e?.message || 'fetch failed')
+        console.error('[broll-v2] recommendationRuns threw:', e)
+      })
     broll.myGenerated(email, { limit: 50 })
       .then(res => {
         const vids = res?.data?.videos || []
         setPastGenerated(vids)
       })
-      .catch(() => {})
+      .catch(e => console.warn('[broll-v2] myGenerated failed:', e))
   }, [email])
 
   // Track pending job_ids so the socket handler can route results.
@@ -1303,9 +1320,30 @@ export default function BrollStudio({ email = '' }) {
       )}
 
       {/* ── Past v2 Runs (history) ── */}
-      {pastV2Runs.length > 0 && (
+      {email && pastV2Status !== 'idle' && (
         <div className="card" style={{ marginTop: 8 }}>
-          <div className="card-title">Past v2 Generations ({pastV2Runs.length})</div>
+          <div className="card-title">
+            Past v2 Generations
+            {pastV2Status === 'ok' && ` (${pastV2Runs.length})`}
+            {pastV2Status === 'loading' && ' …'}
+          </div>
+          {pastV2Status === 'loading' && (
+            <div style={{ fontSize: 12, color: '#94a3b8' }}>
+              <span className="spinner" style={{ width: 11, height: 11, marginRight: 6 }} />
+              Loading saved v2 runs for {email}…
+            </div>
+          )}
+          {pastV2Status === 'error' && (
+            <div style={{ fontSize: 12, color: '#dc2626' }}>
+              Failed to load v2 history: {pastV2Err}. Check the browser console for details.
+            </div>
+          )}
+          {pastV2Status === 'empty' && (
+            <div style={{ fontSize: 12, color: '#94a3b8' }}>
+              No past v2 generations for <code>{email}</code> yet. Run "Find Templates (v2)" below to create one.
+            </div>
+          )}
+          {pastV2Status === 'ok' && pastV2Runs.length > 0 && <>
           <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>
             Saved recommend-v2 runs. Click a run to load it back into the editor below.
           </div>
@@ -1340,6 +1378,7 @@ export default function BrollStudio({ email = '' }) {
               )
             })}
           </div>
+          </>}
         </div>
       )}
 
