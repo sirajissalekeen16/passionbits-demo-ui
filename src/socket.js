@@ -5,9 +5,14 @@ const _joined = new Set()
 
 export function getSocket() {
   if (!_socket) {
+    // Polling first, then upgrade to WebSocket if nginx supports the Upgrade
+    // header. Without this order, environments where nginx is missing the
+    // websocket upgrade config spam the console with reconnect-loop errors
+    // every few seconds even though long-polling actually works.
     _socket = io(window.location.origin, {
       path: '/socket.io',
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
+      upgrade: true,
     })
   }
   return _socket
