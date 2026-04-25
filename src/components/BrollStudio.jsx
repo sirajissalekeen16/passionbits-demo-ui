@@ -1075,6 +1075,7 @@ export default function BrollStudio({ email = '' }) {
       // row or create a duplicate.
       if (status === 'partial' && template && type === 'v2') {
         setV2Loading(false)  // first partial → flip off the spinner, show cards
+        setHasResults(true)  // a job we didn't initiate (e.g. after reload) still renders
         setV2Templates(prev => {
           const idx = prev.findIndex(t => t.id === template.id)
           if (idx === -1) return [...prev, template]
@@ -1110,6 +1111,7 @@ export default function BrollStudio({ email = '' }) {
         if (type === 'v2') {
           setV2Loading(false)
           if (status === 'done') {
+            setHasResults(true)
             // Replace with the fully-captioned payload from Inference 2.
             // If we never got a partial (e.g. direct done), this is also a clean
             // render of the full batch.
@@ -1296,6 +1298,47 @@ export default function BrollStudio({ email = '' }) {
                 )}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Past v2 Runs (history) ── */}
+      {pastV2Runs.length > 0 && (
+        <div className="card" style={{ marginTop: 8 }}>
+          <div className="card-title">Past v2 Generations ({pastV2Runs.length})</div>
+          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>
+            Saved recommend-v2 runs. Click a run to load it back into the editor below.
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {pastV2Runs.map(run => {
+              const ts = run.created_at ? new Date(run.created_at).toLocaleString() : ''
+              const tplCount = (run.templates || []).length
+              const isActive = run.job_id && v2Templates.length > 0 &&
+                run.templates?.[0]?.id === v2Templates[0]?.id
+              return (
+                <div key={run.job_id} style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 10, background: isActive ? '#eef2ff' : '#fff' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <div style={{ fontSize: 11, color: '#475569' }}>
+                      <span style={{ fontWeight: 600 }}>{tplCount} clips</span> · {ts}
+                      {run.context && <span style={{ marginLeft: 6, color: '#94a3b8' }}>· "{run.context.slice(0, 40)}"</span>}
+                    </div>
+                    <button
+                      className="btn btn-outline"
+                      style={{ fontSize: 11, padding: '4px 10px' }}
+                      onClick={() => { setV2Templates(run.templates || []); setHasResults(true) }}
+                    >
+                      {isActive ? 'Active' : 'Load'}
+                    </button>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: 4 }}>
+                    {(run.templates || []).slice(0, 8).map(t => (
+                      <video key={t.id} src={t.video_url} muted playsInline preload="metadata"
+                        style={{ width: '100%', aspectRatio: '9/16', objectFit: 'cover', background: '#000', borderRadius: 4 }} />
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
