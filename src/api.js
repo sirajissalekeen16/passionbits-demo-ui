@@ -55,6 +55,29 @@ export const metaAds = {
   },
 }
 
+// ── Brand Mention Discovery ─────────────────────────────────────────────────
+export const brandMentions = {
+  run:         (email, jobId) => req('POST', '/creators/mentions/run', { email, ...(jobId ? { job_id: jobId } : {}) }),
+  state:       (jobId) => req('GET', `/creators/mentions/state/${encodeURIComponent(jobId)}`),
+  list:        (email, { page = 1, limit = 20, platform, sortBy = 'score', sortOrder = 'desc' } = {}) => {
+    const p = new URLSearchParams({ email, page: String(page), limit: String(limit), sort_by: sortBy, sort_order: sortOrder })
+    if (platform) p.set('platform', platform)
+    return req('GET', `/creators/mentions?${p.toString()}`)
+  },
+  videos:      (email, { page = 1, limit = 50, platform, creatorId, sortBy = 'views', sortOrder = 'desc', uploadedWithin } = {}) => {
+    const p = new URLSearchParams({ email, page: String(page), limit: String(limit), sort_by: sortBy, sort_order: sortOrder })
+    if (platform) p.set('platform', platform)
+    if (creatorId) p.set('creator_id', creatorId)
+    if (uploadedWithin) p.set('uploaded_within', uploadedWithin)
+    return req('GET', `/creators/mentions/videos?${p.toString()}`)
+  },
+  keywords:    (email) => req('GET', `/creators/mentions/keywords?email=${encodeURIComponent(email)}`),
+  addKeywords: (email, keywords) => req('POST', '/creators/mentions/keywords', { email, keywords }),
+  delKeywords: (email, keywords) => req('DELETE', '/creators/mentions/keywords', { email, keywords }),
+  refresh:     (email) => req('POST', '/creators/mentions/refresh', { email }),
+  searchWith:  (email, queries) => req('POST', '/creators/mentions/search-with-queries', { email, queries }),
+}
+
 // ── Instagram OAuth ──────────────────────────────────────────────────────────
 export const igOAuth = {
   status:     (email) => req('GET', `/instagram-oauth/check-connection-status?email=${encodeURIComponent(email)}`),
