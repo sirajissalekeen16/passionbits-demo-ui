@@ -55,6 +55,61 @@ export const metaAds = {
   },
 }
 
+// ── TikTok Ads OAuth ────────────────────────────────────────────────────────
+export const tiktokAdsOAuth = {
+  status:     (email) => req('GET', `/tiktok-ads-oauth/check-connection-status?email=${encodeURIComponent(email)}`),
+  authorize:  (email) => req('POST', '/tiktok-ads-oauth/authorize', { user_email: email }),
+  refresh:    (email) => req('POST', '/tiktok-ads-oauth/refresh', { user_email: email }),
+  disconnect: (email) => req('POST', '/tiktok-ads-oauth/disconnect-account', { user_email: email }),
+}
+
+// ── TikTok Ads ───────────────────────────────────────────────────────────────
+export const tiktokAds = {
+  listAccounts: (email) => req('GET', `/tiktok-ads/ad-accounts?email=${encodeURIComponent(email)}`),
+
+  librarySync: (email, advertiserIds, datePreset = 'last_30d') =>
+    req('POST', '/tiktok-ads/library/sync', { user_email: email, advertiser_ids: advertiserIds, date_preset: datePreset }),
+
+  syncStatus: (email, jobId) => {
+    const p = new URLSearchParams({ email })
+    if (jobId) p.set('job_id', jobId)
+    return req('GET', `/tiktok-ads/library/sync-status?${p}`)
+  },
+
+  // Account KPIs + avg hook/hold/click/buy + daily graph
+  accountSummary: (email, { advertiserId, datePreset = 'last_30d', minSpend = 0, includeGraph = true } = {}) => {
+    const p = new URLSearchParams({ email, date_preset: datePreset, min_spend: String(minSpend), include_graph: String(includeGraph) })
+    if (advertiserId) p.set('advertiser_id', advertiserId)
+    return req('GET', `/tiktok-ads/account/summary?${p}`)
+  },
+
+  // Per-ad table — sortable by any score / metric
+  // Response: r.data = [...ads], r.meta = { page, page_size, total, total_pages }
+  accountAds: (email, { advertiserId, sortBy = 'overall_score', order = 'desc', page = 1, pageSize = 20, minSpend = 0 } = {}) => {
+    const p = new URLSearchParams({
+      email, sort_by: sortBy, order, page: String(page), page_size: String(pageSize), min_spend: String(minSpend),
+    })
+    if (advertiserId) p.set('advertiser_id', advertiserId)
+    return req('GET', `/tiktok-ads/account/ads?${p}`)
+  },
+
+  ask: (email, question, advertiserIds, datePreset) =>
+    req('POST', '/tiktok-ads/ask', { user_email: email, question, advertiser_ids: advertiserIds, date_preset: datePreset }),
+
+  reportPdf: (email, query, advertiserIds, datePreset) =>
+    req('POST', '/tiktok-ads/report/markdown', { user_email: email, query, advertiser_ids: advertiserIds, date_preset: datePreset }),
+
+  reportHtml: (email, query, advertiserIds, datePreset) =>
+    req('POST', '/tiktok-ads/report/html', { user_email: email, query, advertiser_ids: advertiserIds, date_preset: datePreset }),
+
+  overallReport: (email, advertiserIds, datePreset) =>
+    req('POST', '/tiktok-ads/overall-report', { user_email: email, advertiser_ids: advertiserIds, date_preset: datePreset }),
+
+  listPdfReports:  (email) => req('GET', `/tiktok-ads/reports/markdown?email=${encodeURIComponent(email)}`),
+  listHtmlReports: (email) => req('GET', `/tiktok-ads/reports/html?email=${encodeURIComponent(email)}`),
+  listOverall:     (email) => req('GET', `/tiktok-ads/overall-reports?email=${encodeURIComponent(email)}`),
+}
+
 // ── Instagram OAuth ──────────────────────────────────────────────────────────
 export const igOAuth = {
   status:     (email) => req('GET', `/instagram-oauth/check-connection-status?email=${encodeURIComponent(email)}`),
