@@ -55,6 +55,19 @@ export const metaAds = {
   },
 }
 
+// ── TikTok Ads OAuth ────────────────────────────────────────────────────────
+export const tiktokAdsOAuth = {
+  status:     (email) => req('GET', `/tiktok-ads-oauth/check-connection-status?email=${encodeURIComponent(email)}`),
+  authorize:  (email) => req('POST', '/tiktok-ads-oauth/authorize', { user_email: email }),
+  refresh:    (email) => req('POST', '/tiktok-ads-oauth/refresh', { user_email: email }),
+  disconnect: (email) => req('POST', '/tiktok-ads-oauth/disconnect-account', { user_email: email }),
+}
+
+// ── TikTok Ads ───────────────────────────────────────────────────────────────
+export const tiktokAds = {
+  listAccounts: (email) => req('GET', `/tiktok-ads/ad-accounts?email=${encodeURIComponent(email)}`),
+}
+
 // ── Instagram OAuth ──────────────────────────────────────────────────────────
 export const igOAuth = {
   status:     (email) => req('GET', `/instagram-oauth/check-connection-status?email=${encodeURIComponent(email)}`),

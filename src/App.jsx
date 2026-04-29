@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import EmailGate from './components/EmailGate'
 import AdAccount from './components/AdAccount'
+import TikTokAdAccount from './components/TikTokAdAccount'
 import ContentPublishing from './components/ContentPublishing'
 import BrollStudio from './components/BrollStudio'
 import SlideshowStudio from './components/SlideshowStudio'
@@ -26,6 +27,9 @@ export default function App() {
         <button className={`nav-tab ${tab === 'ads' ? 'active' : ''}`} onClick={() => setTab('ads')}>
           Meta Ads Account
         </button>
+        <button className={`nav-tab ${tab === 'tiktok-ads' ? 'active' : ''}`} onClick={() => setTab('tiktok-ads')}>
+          TikTok Ads Account
+        </button>
         <button className={`nav-tab ${tab === 'publish' ? 'active' : ''}`} onClick={() => setTab('publish')}>
           Content Publishing
         </button>
@@ -38,10 +42,11 @@ export default function App() {
       </nav>
 
       <main className="app-main">
-        {tab === 'ads'       && <AdAccount email={email} />}
-        {tab === 'publish'   && <ContentPublishing email={email} />}
-        {tab === 'broll'     && <BrollStudio email={email} />}
-        {tab === 'slideshow' && <SlideshowStudio email={email} />}
+        {tab === 'ads'        && <AdAccount email={email} />}
+        {tab === 'tiktok-ads' && <TikTokAdAccount email={email} />}
+        {tab === 'publish'    && <ContentPublishing email={email} />}
+        {tab === 'broll'      && <BrollStudio email={email} />}
+        {tab === 'slideshow'  && <SlideshowStudio email={email} />}
       </main>
     </div>
   )
