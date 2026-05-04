@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { metaOAuth, metaAds } from '../api'
 import ConnectionBadge from './ConnectionBadge'
+import AdInsights from './AdInsights'
 import { useToast } from './useToast.jsx'
 
 const DATE_PRESETS = ['today', 'yesterday', 'last_7d', 'last_14d', 'last_30d', 'last_90d', 'this_month', 'last_month']
@@ -460,6 +461,9 @@ export default function AdAccount({ email }) {
               </div>
             )}
           </div>
+
+          {/* ── AI Account Insights ── */}
+          <AdInsights platform="meta" email={email} datePreset={datePreset} />
 
           {/* ── Ask ── */}
           <div className="card">

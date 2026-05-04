@@ -53,6 +53,13 @@ export const metaAds = {
     if (accountId) p.set('account_id', accountId)
     return req('GET', `/meta-ads/account/ads?${p.toString()}`)
   },
+
+  // Two-phase AI insights — phase 1 = deterministic KPIs + top/bottom ads,
+  // phase 2 (cached 24 h) adds LLM bullets once video analysis completes.
+  accountInsights: (email, { datePreset = 'last_30d', force = false } = {}) => {
+    const p = new URLSearchParams({ email, date_preset: datePreset, force: String(force) })
+    return req('GET', `/meta-ads/account/insights?${p.toString()}`)
+  },
 }
 
 // ── TikTok Ads OAuth ────────────────────────────────────────────────────────
@@ -108,6 +115,12 @@ export const tiktokAds = {
   listPdfReports:  (email) => req('GET', `/tiktok-ads/reports/markdown?email=${encodeURIComponent(email)}`),
   listHtmlReports: (email) => req('GET', `/tiktok-ads/reports/html?email=${encodeURIComponent(email)}`),
   listOverall:     (email) => req('GET', `/tiktok-ads/overall-reports?email=${encodeURIComponent(email)}`),
+
+  // Two-phase AI insights — same shape as Meta endpoint.
+  accountInsights: (email, { datePreset = 'last_30d', force = false } = {}) => {
+    const p = new URLSearchParams({ email, date_preset: datePreset, force: String(force) })
+    return req('GET', `/tiktok-ads/account/insights?${p.toString()}`)
+  },
 }
 
 // ── Instagram OAuth ──────────────────────────────────────────────────────────

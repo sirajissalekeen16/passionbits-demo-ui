@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { tiktokAdsOAuth, tiktokAds } from '../api'
 import ConnectionBadge from './ConnectionBadge'
+import AdInsights from './AdInsights'
 import { useToast } from './useToast.jsx'
 
 const DATE_PRESETS = ['today', 'yesterday', 'last_7d', 'last_14d', 'last_30d', 'last_90d', 'this_month']
@@ -560,6 +561,9 @@ export default function TikTokAdAccount({ email }) {
               </div>
             )}
           </div>
+
+          {/* ── AI Account Insights ── */}
+          <AdInsights platform="tiktok" email={email} datePreset={datePreset} />
 
           {/* ── Ask AI ── */}
           <div className="card">
