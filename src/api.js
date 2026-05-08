@@ -241,6 +241,65 @@ export const broll = {
   },
 }
 
+// ── Ad Analysis ─────────────────────────────────────────────────────────────
+export const adAnalysis = {
+  get: (platform, adId, email, force = false) => {
+    const p = new URLSearchParams({ email })
+    if (force) p.set('force', 'true')
+    return req('GET', `/ad-analysis/${platform}/${adId}?${p.toString()}`)
+  },
+  generateScripts: (platform, adId, email, count = 5, language = 'en') => {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 60_000)
+    return fetch(BASE + `/ad-analysis/${platform}/${adId}/generate-scripts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, count, language }),
+      signal: controller.signal,
+    })
+      .then(r => r.json())
+      .finally(() => clearTimeout(timer))
+  },
+}
+
+// ── Winning Features ─────────────────────────────────────────────────────────
+export const winningFeatures = {
+  list: (platform, email, force = false) => {
+    const p = new URLSearchParams({ email, force: String(force) })
+    return req('GET', `/winning-features/${platform}?${p}`)
+  },
+  recommendations: (platform, email, featureIndex, limit = 12) => {
+    const p = new URLSearchParams({ email, feature_index: String(featureIndex), limit: String(limit) })
+    return req('GET', `/winning-features/${platform}/recommendations?${p}`)
+  },
+}
+
+// ── Creative Patterns ─────────────────────────────────────────────────────────
+export const creativePatterns = {
+  list: (platform, email, force = false) => {
+    const p = new URLSearchParams({ email, force: String(force) })
+    return req('GET', `/creative-patterns/${platform}?${p}`)
+  },
+  ads: (platform, adFormatTag, email, { page = 1, pageSize = 20 } = {}) => {
+    const p = new URLSearchParams({ email, page: String(page), page_size: String(pageSize) })
+    return req('GET', `/creative-patterns/${platform}/${encodeURIComponent(adFormatTag)}/ads?${p}`)
+  },
+  recommendations: (platform, adFormatTag, email, limit = 12) => {
+    const p = new URLSearchParams({ email, limit: String(limit) })
+    return req('GET', `/creative-patterns/${platform}/${encodeURIComponent(adFormatTag)}/recommendations?${p}`)
+  },
+  scripts: (platform, adFormatTag, email, count = 5) => {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 60_000)
+    return fetch(BASE + `/creative-patterns/${platform}/${encodeURIComponent(adFormatTag)}/scripts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, count }),
+      signal: controller.signal,
+    }).then(r => r.json()).finally(() => clearTimeout(timer))
+  },
+}
+
 // ── Music ────────────────────────────────────────────────────────────────────
 export const music = {
   list: ({ mood, genre, email, source, limit = 100 } = {}) => {

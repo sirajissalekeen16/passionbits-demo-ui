@@ -2,9 +2,21 @@ import { useState, useEffect } from 'react'
 import { metaOAuth, metaAds } from '../api'
 import ConnectionBadge from './ConnectionBadge'
 import AdInsights from './AdInsights'
+import AdAnalysisModal from './AdAnalysisModal'
+import CreativePatterns from './CreativePatterns'
 import { useToast } from './useToast.jsx'
 
 const DATE_PRESETS = ['today', 'yesterday', 'last_7d', 'last_14d', 'last_30d', 'last_90d', 'this_month', 'last_month']
+
+const CURRENCY_SYMBOLS = {
+  USD: '$', CAD: 'CA$', AUD: 'A$', NZD: 'NZ$',
+  EUR: '€', GBP: '£', INR: '₹', BDT: '৳',
+  JPY: '¥', CNY: '¥', SGD: 'S$', HKD: 'HK$',
+}
+function symbolFor(cur) {
+  if (!cur) return ''
+  return CURRENCY_SYMBOLS[String(cur).toUpperCase()] || String(cur).toUpperCase() + ' '
+}
 
 export default function AdAccount({ email }) {
   const { show, Toast } = useToast()
@@ -284,16 +296,22 @@ export default function AdAccount({ email }) {
               </div>
             </div>
 
-            {summary && (
+            {summary && (() => {
+              const sym = summary.totals?.currency_symbol || summary.currency_symbol || ''
+              const mixed = summary.totals?.mixed_currency || summary.mixed_currency
+              const moneyPrefix = mixed ? '' : sym
+              const moneySuffix = mixed ? ' (mixed)' : ''
+              const fmtMoney = (v) => `${moneyPrefix}${Number(v).toLocaleString()}${moneySuffix}`
+              return (
               <div style={{ marginBottom: 16 }}>
                 {/* KPIs */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8, marginBottom: 12 }}>
                   {[
-                    ['Spend', `$${summary.totals.spend.toLocaleString()}`],
+                    ['Spend', fmtMoney(summary.totals.spend)],
                     ['Impressions', summary.totals.impressions.toLocaleString()],
                     ['Clicks', summary.totals.clicks.toLocaleString()],
-                    ['CPM', `$${summary.totals.cpm}`],
-                    ['CPC', `$${summary.totals.cpc}`],
+                    ['CPM', fmtMoney(summary.totals.cpm)],
+                    ['CPC', fmtMoney(summary.totals.cpc)],
                     ['CTR', `${summary.totals.ctr}%`],
                     ['ROAS', `${summary.totals.roas}x`],
                     ['Total ads', summary.total_ads],
@@ -339,7 +357,8 @@ export default function AdAccount({ email }) {
                   </div>
                 )}
               </div>
-            )}
+              )
+            })()}
 
             {adsList.items.length > 0 && (
               <>
@@ -384,41 +403,36 @@ export default function AdAccount({ email }) {
                       {adsList.items.map(ad => (
                         <tr key={ad.id} style={{ borderBottom: '1px solid #1e293b' }}>
                           <td style={{ padding: '8px 10px', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {(ad.thumbnail_url || ad.video_url) ? (
-                              <button
-                                type="button"
-                                onClick={() => ad.video_url && setPreviewAd(ad)}
-                                disabled={!ad.video_url}
-                                title={ad.video_url ? 'Click to play video' : 'No video URL available'}
-                                style={{
-                                  display: 'inline-flex', alignItems: 'center', gap: 8,
-                                  background: 'transparent', border: 'none', padding: 0,
-                                  cursor: ad.video_url ? 'pointer' : 'default',
-                                  color: 'inherit', font: 'inherit', textAlign: 'left',
-                                  maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                                }}
-                              >
-                                <span style={{ position: 'relative', width: 32, height: 32, flexShrink: 0 }}>
-                                  {ad.thumbnail_url
-                                    ? <img src={ad.thumbnail_url} alt="" style={{ width: 32, height: 32, borderRadius: 4, objectFit: 'cover', display: 'block' }} />
-                                    : <div style={{ width: 32, height: 32, borderRadius: 4, background: '#1e293b' }} />
-                                  }
-                                  {ad.video_url && (
-                                    <span style={{
-                                      position: 'absolute', inset: 0, display: 'grid', placeItems: 'center',
-                                      background: 'rgba(0,0,0,0.45)', borderRadius: 4, fontSize: 12, color: '#fff',
-                                    }}>▶</span>
-                                  )}
-                                </span>
-                                <span title={ad.ad_name} style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                  {ad.ad_name || '—'}
-                                </span>
-                              </button>
-                            ) : (
-                              <span title={ad.ad_name}>{ad.ad_name || '—'}</span>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => setPreviewAd(ad)}
+                              title="Open AI analysis"
+                              style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 8,
+                                background: 'transparent', border: 'none', padding: 0,
+                                cursor: 'pointer',
+                                color: 'inherit', font: 'inherit', textAlign: 'left',
+                                maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                              }}
+                            >
+                              <span style={{ position: 'relative', width: 32, height: 32, flexShrink: 0 }}>
+                                {ad.thumbnail_url
+                                  ? <img src={ad.thumbnail_url} alt="" style={{ width: 32, height: 32, borderRadius: 4, objectFit: 'cover', display: 'block' }} />
+                                  : <div style={{ width: 32, height: 32, borderRadius: 4, background: '#1e293b', display: 'grid', placeItems: 'center', fontSize: 14, color: '#475569' }}>▤</div>
+                                }
+                                {ad.video_url && (
+                                  <span style={{
+                                    position: 'absolute', inset: 0, display: 'grid', placeItems: 'center',
+                                    background: 'rgba(0,0,0,0.45)', borderRadius: 4, fontSize: 12, color: '#fff',
+                                  }}>▶</span>
+                                )}
+                              </span>
+                              <span title={ad.ad_name} style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {ad.ad_name || '—'}
+                              </span>
+                            </button>
                           </td>
-                          <td style={{ padding: '8px 10px' }}>${ad.spend.toLocaleString()}</td>
+                          <td style={{ padding: '8px 10px' }}>{symbolFor(ad.currency || ad.account_currency)}{ad.spend.toLocaleString()}</td>
                           <td style={{ padding: '8px 10px' }}>{ad.roas}x</td>
                           <td style={{ padding: '8px 10px' }}>{scorePill(ad.hook_score)}</td>
                           <td style={{ padding: '8px 10px' }}>{scorePill(ad.hold_score)}</td>
@@ -426,8 +440,8 @@ export default function AdAccount({ email }) {
                           <td style={{ padding: '8px 10px' }}>{scorePill(ad.buy_score)}</td>
                           <td style={{ padding: '8px 10px' }}>{scorePill(ad.overall_score)}</td>
                           <td style={{ padding: '8px 10px' }}>{ad.recent_roas_7d != null ? `${ad.recent_roas_7d}x` : '—'}</td>
-                          <td style={{ padding: '8px 10px' }}>${ad.cpm}</td>
-                          <td style={{ padding: '8px 10px' }}>${ad.cpc}</td>
+                          <td style={{ padding: '8px 10px' }}>{symbolFor(ad.currency || ad.account_currency)}{ad.cpm}</td>
+                          <td style={{ padding: '8px 10px' }}>{symbolFor(ad.currency || ad.account_currency)}{ad.cpc}</td>
                           <td style={{ padding: '8px 10px' }}>{ad.ctr}%</td>
                           <td style={{ padding: '8px 10px' }}>{ad.purchases}</td>
                           <td style={{ padding: '8px 10px' }}>{ad.days_running ?? '—'}</td>
@@ -464,6 +478,9 @@ export default function AdAccount({ email }) {
 
           {/* ── AI Account Insights ── */}
           <AdInsights platform="meta" email={email} datePreset={datePreset} />
+
+          {/* ── Creative Patterns ── */}
+          <CreativePatterns platform="meta" email={email} />
 
           {/* ── Ask ── */}
           <div className="card">
@@ -581,57 +598,13 @@ export default function AdAccount({ email }) {
         </>
       )}
 
-      {/* Video preview modal */}
       {previewAd && (
-        <div
-          onClick={() => setPreviewAd(null)}
-          style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
-            display: 'grid', placeItems: 'center', zIndex: 9999, padding: 20,
-          }}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{
-              background: '#0f172a', borderRadius: 8, padding: 16, maxWidth: 480,
-              width: '100%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', gap: 10,
-              border: '1px solid #1e293b',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={previewAd.ad_name}>
-                {previewAd.ad_name || 'Ad video'}
-              </div>
-              <button
-                onClick={() => setPreviewAd(null)}
-                style={{ background: 'transparent', border: '1px solid #334155', color: '#cbd5e1', padding: '2px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 18, lineHeight: 1 }}
-                title="Close"
-              >×</button>
-            </div>
-            <video
-              src={previewAd.video_url}
-              poster={previewAd.thumbnail_url || undefined}
-              controls
-              autoPlay
-              playsInline
-              style={{ width: '100%', maxHeight: '70vh', background: '#000', borderRadius: 4 }}
-            />
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, fontSize: 12, color: '#94a3b8' }}>
-              {previewAd.campaign_name && <span><b style={{ color: '#cbd5e1' }}>Campaign:</b> {previewAd.campaign_name}</span>}
-              {typeof previewAd.spend === 'number' && <span><b style={{ color: '#cbd5e1' }}>Spend:</b> {previewAd.spend.toLocaleString()}</span>}
-              {previewAd.roas != null && <span><b style={{ color: '#cbd5e1' }}>ROAS:</b> {previewAd.roas}x</span>}
-              {previewAd.overall_score != null && <span><b style={{ color: '#cbd5e1' }}>Overall:</b> {previewAd.overall_score}</span>}
-              <a
-                href={previewAd.video_url}
-                target="_blank"
-                rel="noreferrer"
-                style={{ color: '#6366f1', marginLeft: 'auto' }}
-              >
-                Open in new tab
-              </a>
-            </div>
-          </div>
-        </div>
+        <AdAnalysisModal
+          ad={previewAd}
+          email={email}
+          platform="meta"
+          onClose={() => setPreviewAd(null)}
+        />
       )}
     </div>
   )

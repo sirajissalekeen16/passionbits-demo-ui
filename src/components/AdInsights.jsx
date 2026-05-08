@@ -365,6 +365,27 @@ export default function AdInsights({ platform, email, datePreset }) {
             </div>
           ))}
 
+          {/* ── Most Winning Ads include ── */}
+          {data.most_winning_features?.length > 0 && (
+            <div style={{
+              background: '#0f172a', border: '1px solid #3730a3', borderRadius: 6,
+              padding: 12, marginBottom: 10,
+            }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#818cf8', textTransform: 'uppercase', marginBottom: 10 }}>
+                Most Winning Ads include
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {data.most_winning_features.map((f, i) => (
+                  <span key={i} style={{
+                    display: 'inline-block', padding: '5px 12px', borderRadius: 20,
+                    background: '#1e1b4b', border: '1px solid #4c1d95',
+                    fontSize: 12, color: '#c4b5fd', fontWeight: 500,
+                  }}>✓ {f}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div style={{ fontSize: 11, color: '#475569', marginTop: 6 }}>
             {data.cached ? 'Served from 24-hour cache · ' : ''}Generated {data.generated_at ? new Date(data.generated_at).toLocaleString() : '—'}
           </div>
