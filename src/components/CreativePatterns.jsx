@@ -26,6 +26,12 @@ function LiftBadge({ label }) {
   )
 }
 
+function thumbUrl(t) {
+  if (!t) return null
+  if (typeof t === 'string') return t
+  return t.thumbnail_url || t.video_url || null
+}
+
 function PatternCard({ pattern, platform, email }) {
   const [expanded, setExpanded] = useState(false)
   const [section, setSection] = useState('ads') // 'ads' | 'recs' | 'scripts'
@@ -35,6 +41,10 @@ function PatternCard({ pattern, platform, email }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
+  const m = pattern.metrics || {}
+  const lifts = Array.isArray(pattern.lifts) ? pattern.lifts : []
+  const ctrLift = lifts.find(l => l.metric === 'CTR')
+
   async function open(nextSection) {
     setSection(nextSection)
     if (!expanded) setExpanded(true)
@@ -43,21 +53,21 @@ function PatternCard({ pattern, platform, email }) {
     if (nextSection === 'ads' && !ads) {
       setLoading(true)
       const r = await creativePatterns.ads(platform, pattern.ad_format_tag, email)
-      if (r?.data) setAds(r.data.items || r.data || [])
+      if (r?.data) setAds(r.data.ads || r.data.items || [])
       else setError(r?.message || 'Failed to load ads')
       setLoading(false)
     }
     if (nextSection === 'recs' && !recs) {
       setLoading(true)
       const r = await creativePatterns.recommendations(platform, pattern.ad_format_tag, email)
-      if (r?.data) setRecs(r.data.videos || r.data || [])
+      if (r?.data) setRecs(r.data.videos || [])
       else setError(r?.message || 'Failed to load recommendations')
       setLoading(false)
     }
     if (nextSection === 'scripts' && !scripts) {
       setLoading(true)
       const r = await creativePatterns.scripts(platform, pattern.ad_format_tag, email)
-      if (r?.data) setScripts(r.data.scripts || r.data || [])
+      if (r?.data) setScripts(r.data.scripts || [])
       else setError(r?.message || 'Failed to generate scripts')
       setLoading(false)
     }
@@ -72,11 +82,14 @@ function PatternCard({ pattern, platform, email }) {
       <div style={{ padding: '12px 14px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
         {/* Thumbnails */}
         <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
-          {(pattern.top_thumbnails || []).slice(0, 3).map((url, i) => (
-            <img key={i} src={url} alt="" style={{ width: 36, height: 36, borderRadius: 4, objectFit: 'cover' }} />
-          ))}
+          {(pattern.top_thumbnails || []).slice(0, 3).map((t, i) => {
+            const url = thumbUrl(t)
+            return url
+              ? <img key={i} src={url} alt="" style={{ width: 44, height: 44, borderRadius: 4, objectFit: 'cover' }} />
+              : <div key={i} style={{ width: 44, height: 44, borderRadius: 4, background: '#1e293b' }} />
+          })}
           {(!pattern.top_thumbnails?.length) && (
-            <div style={{ width: 36, height: 36, borderRadius: 4, background: '#1e293b', display: 'grid', placeItems: 'center', fontSize: 14, color: '#475569' }}>▤</div>
+            <div style={{ width: 44, height: 44, borderRadius: 4, background: '#1e293b', display: 'grid', placeItems: 'center', fontSize: 14, color: '#475569' }}>▤</div>
           )}
         </div>
 
@@ -90,15 +103,15 @@ function PatternCard({ pattern, platform, email }) {
             <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 6, lineHeight: 1.5 }}>{pattern.description}</div>
           )}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-            {pattern.ctr_lift_label && <LiftBadge label={pattern.ctr_lift_label} />}
-            {pattern.avg_hook_score != null && (
-              <span style={{ fontSize: 11, color: '#94a3b8' }}>Hook {scorePill(pattern.avg_hook_score)}</span>
+            {ctrLift && <LiftBadge label={ctrLift.ratio >= 1 ? `${ctrLift.ratio.toFixed(2)}× CTR` : `${(ctrLift.ratio * 100).toFixed(0)}% CTR vs avg`} />}
+            {m.avg_hook_score != null && (
+              <span style={{ fontSize: 11, color: '#94a3b8' }}>Hook {scorePill(m.avg_hook_score)}</span>
             )}
-            {pattern.avg_hold_score != null && (
-              <span style={{ fontSize: 11, color: '#94a3b8' }}>Hold {scorePill(pattern.avg_hold_score)}</span>
+            {m.avg_hold_score != null && (
+              <span style={{ fontSize: 11, color: '#94a3b8' }}>Hold {scorePill(m.avg_hold_score)}</span>
             )}
-            {pattern.avg_ctr != null && (
-              <span style={{ fontSize: 11, color: '#94a3b8' }}>CTR <b style={{ color: '#e2e8f0' }}>{pattern.avg_ctr}%</b></span>
+            {m.avg_ctr != null && (
+              <span style={{ fontSize: 11, color: '#94a3b8' }}>CTR <b style={{ color: '#e2e8f0' }}>{Number(m.avg_ctr).toFixed(2)}%</b></span>
             )}
           </div>
           {pattern.why_this_works?.length > 0 && (
@@ -252,7 +265,7 @@ export default function CreativePatterns({ platform, email }) {
     setLoading(true)
     setError('')
     const r = await creativePatterns.list(platform, email, force)
-    if (r?.data) setPatterns(r.data.patterns || r.data || [])
+    if (r?.data) setPatterns(r.data.patterns || [])
     else setError(r?.message || 'Failed to load patterns')
     setLoading(false)
   }
