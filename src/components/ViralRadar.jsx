@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { viralRadar } from '../api'
 import { useToast } from './useToast.jsx'
+import { getSocket, joinRoom } from '../socket'
 
 const VERSIONS = ['v1', 'v2', 'v3']
 
@@ -45,6 +46,8 @@ export default function ViralRadar({ email }) {
   const [perspectiveFilter, setPerspectiveFilter] = useState('')
   const [creatorSort, setCreatorSort] = useState('follower_count')
 
+  const [liveStep, setLiveStep] = useState(null)
+
   const loadRun = useCallback(async () => {
     if (!email) return
     setRunLoading(true)
@@ -75,6 +78,37 @@ export default function ViralRadar({ email }) {
   useEffect(() => { loadRun() }, [loadRun])
   useEffect(() => { loadVideos() }, [loadVideos])
   useEffect(() => { if (view === 'micro') loadMicro() }, [view, loadMicro])
+
+  // Live updates: the backend emits every industry_discovery_* event under a
+  // single 'live_progress' socket event (room = email), with the real event
+  // name nested at payload.event and the run/progress data at payload.data —
+  // see app/utils/socket_notifier.py:emit_progress. Falls back fine if the
+  // socket never connects — the 2s post-start reload in startRun() still
+  // covers that case.
+  useEffect(() => {
+    if (!email) return
+    const sock = getSocket()
+    joinRoom(email)
+
+    const onLiveProgress = (payload) => {
+      const eventName = payload?.event || ''
+      const data = payload?.data || {}
+      if (eventName === 'industry_discovery_complete') {
+        setLiveStep(null)
+        loadRun()
+        loadVideos()
+        show('Discovery run completed.')
+      } else if (eventName === 'industry_discovery_error') {
+        setLiveStep(null)
+        show(data?.message || data?.error || 'Discovery run failed.', 'error')
+      } else if (eventName.startsWith('industry_discovery_')) {
+        setLiveStep(data?.currentStep || data?.current_step || eventName.replace('industry_discovery_', ''))
+      }
+    }
+
+    sock.on('live_progress', onLiveProgress)
+    return () => sock.off('live_progress', onLiveProgress)
+  }, [email, loadRun, loadVideos, show])
 
   async function startRun() {
     setStarting(true)
@@ -170,6 +204,12 @@ export default function ViralRadar({ email }) {
             Refresh
           </button>
         </div>
+        {liveStep && (
+          <div style={{ marginTop: 10, fontSize: 12, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span className="spinner" style={{ width: 10, height: 10 }} />
+            Live: {liveStep}
+          </div>
+        )}
         {run && (
           <div style={{ marginTop: 10, fontSize: 12, color: '#94a3b8', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
             <span>Status: <b style={{ color: '#e2e8f0' }}>{run.status}</b></span>
