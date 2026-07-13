@@ -391,6 +391,10 @@ export const viralRadar = {
   startRun: (email, version = 'v1', includeCompetitorMentions = false) =>
     req('POST', RADAR_CREATE_PATH[version] || RADAR_CREATE_PATH.v1, {
       email,
+      // Without this the backend takes its legacy strict-filter path (no
+      // tiered gates, no v2/v3 perspective filtering, no fallback) and
+      // returns 0 videos for most brands.
+      source_mode: 'viral_radar',
       include_competitor_mentions: includeCompetitorMentions,
     }),
 
