@@ -1,4 +1,7 @@
-const BASE = '/api/v1'
+// VITE_API_BASE_URL lets this UI call a cross-origin backend (e.g.
+// dev-ai-backend-v2.passionbits.io) instead of assuming an nginx same-origin
+// proxy. Falls back to the relative path for any deployment still proxied.
+const BASE = `${import.meta.env.VITE_API_BASE_URL || ''}/api/v1`
 
 async function req(method, path, body) {
   const opts = {
@@ -376,4 +379,38 @@ export const posting = {
       scheduled_at: scheduledAt || null,
       ...opts,
     }),
+}
+
+// ── Viral Radar (v1 / v2 / v3 + Creators Talking About Competitors) ────────
+const RADAR_CREATE_PATH = { v1: '/discovery-runs', v2: '/v2/discovery-runs', v3: '/v3/discovery-runs' }
+const RADAR_LATEST_PATH = { v1: '/discovery-runs/latest', v2: '/v2/discovery-runs/latest', v3: '/v3/discovery-runs/latest' }
+
+export const viralRadar = {
+  // Kick off a new run. version: 'v1' | 'v2' | 'v3'. includeCompetitorMentions
+  // opts into the "Creators Talking About Competitors" source regardless of version.
+  startRun: (email, version = 'v1', includeCompetitorMentions = false) =>
+    req('POST', RADAR_CREATE_PATH[version] || RADAR_CREATE_PATH.v1, {
+      email,
+      include_competitor_mentions: includeCompetitorMentions,
+    }),
+
+  // Run metadata + perspectives + creator_candidates + creator_prospects for
+  // the latest run of a given version.
+  latestRun: (email, version = 'v1') =>
+    req('GET', `${RADAR_LATEST_PATH[version] || RADAR_LATEST_PATH.v1}?email=${encodeURIComponent(email)}`),
+
+  // Kept videos from the brand's most recent run (any version), with
+  // perspective + competitor_mentioned tags per video.
+  newlyFetchedVideos: (email, sort = 'relevance', limit = 100) =>
+    req('GET', `/discovery-runs/newly-fetched?email=${encodeURIComponent(email)}&sort=${sort}&limit=${limit}`),
+
+  // Existing dedicated micro-creator surfacing (10x-follower-ratio rule
+  // computed server-side — not reimplemented here).
+  microCreators: (email, { page = 1, limit = 20, highPerforming, sortBy, source } = {}) => {
+    const p = new URLSearchParams({ email, page: String(page), limit: String(limit) })
+    if (highPerforming != null) p.set('high_performing', String(highPerforming))
+    if (sortBy) p.set('sort_by', sortBy)
+    if (source) p.set('source', source)
+    return req('GET', `/creator-discovery/micro-creators?${p.toString()}`)
+  },
 }

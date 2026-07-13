@@ -5,6 +5,7 @@ import TikTokAdAccount from './components/TikTokAdAccount'
 import ContentPublishing from './components/ContentPublishing'
 import BrollStudio from './components/BrollStudio'
 import SlideshowStudio from './components/SlideshowStudio'
+import ViralRadar from './components/ViralRadar'
 import './App.css'
 
 export default function App() {
@@ -39,6 +40,9 @@ export default function App() {
         <button className={`nav-tab ${tab === 'slideshow' ? 'active' : ''}`} onClick={() => setTab('slideshow')}>
           Slideshow
         </button>
+        <button className={`nav-tab ${tab === 'viral-radar' ? 'active' : ''}`} onClick={() => setTab('viral-radar')}>
+          Viral Radar
+        </button>
       </nav>
 
       <main className="app-main">
@@ -47,6 +51,7 @@ export default function App() {
         {tab === 'publish'    && <ContentPublishing email={email} />}
         {tab === 'broll'      && <BrollStudio email={email} />}
         {tab === 'slideshow'  && <SlideshowStudio email={email} />}
+        {tab === 'viral-radar' && <ViralRadar email={email} />}
       </main>
     </div>
   )
