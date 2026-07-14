@@ -386,9 +386,17 @@ const RADAR_CREATE_PATH = { v1: '/discovery-runs', v2: '/v2/discovery-runs', v3:
 const RADAR_LATEST_PATH = { v1: '/discovery-runs/latest', v2: '/v2/discovery-runs/latest', v3: '/v3/discovery-runs/latest' }
 
 export const viralRadar = {
-  // Kick off a new run. version: 'v1' | 'v2' | 'v3'. includeCompetitorMentions
-  // opts into the "Creators Talking About Competitors" source regardless of version.
-  startRun: (email, version = 'v1', includeCompetitorMentions = false) =>
+  // Kick off a new run. version: 'v1' | 'v2' | 'v3'. Options:
+  //   includeCompetitorMentions — "Creators Talking About Competitors" source
+  //   includeTiktok — explicit TikTok opt-in (India brands default IG-only)
+  //   harvestDepth — 'balanced' (default) | 'deep' | 'exhaustive'
+  //   highVolume — high-volume creator mining mode
+  startRun: (email, version = 'v1', {
+    includeCompetitorMentions = false,
+    includeTiktok = false,
+    harvestDepth = null,
+    highVolume = false,
+  } = {}) =>
     req('POST', RADAR_CREATE_PATH[version] || RADAR_CREATE_PATH.v1, {
       email,
       // Without this the backend takes its legacy strict-filter path (no
@@ -396,6 +404,9 @@ export const viralRadar = {
       // returns 0 videos for most brands.
       source_mode: 'viral_radar',
       include_competitor_mentions: includeCompetitorMentions,
+      ...(includeTiktok ? { platforms: ['tiktok', 'instagram'] } : {}),
+      ...(harvestDepth ? { harvest_depth: harvestDepth } : {}),
+      ...(highVolume ? { high_volume_creator_mode: true } : {}),
     }),
 
   // Run metadata + perspectives + creator_candidates + creator_prospects for
@@ -408,13 +419,38 @@ export const viralRadar = {
   newlyFetchedVideos: (email, sort = 'relevance', limit = 100) =>
     req('GET', `/discovery-runs/newly-fetched?email=${encodeURIComponent(email)}&sort=${sort}&limit=${limit}`),
 
+  // Brand-wide accumulated creators (CreatorWatchlist across ALL runs) with
+  // per-creator perspectives — the cumulative pool, not just the latest run.
+  watchlist: (email, { page = 1, limit = 100, status, includeRejected, platform, perspective, microOnly } = {}) => {
+    const p = new URLSearchParams({ email, page: String(page), limit: String(limit) })
+    if (status) p.set('status', status)
+    if (includeRejected) p.set('include_rejected', 'true')
+    if (platform) p.set('platform', platform)
+    if (perspective) p.set('perspective', perspective)
+    if (microOnly) p.set('micro_only', 'true')
+    return req('GET', `/creator-discovery/watchlist?${p.toString()}`)
+  },
+
+  // Bulk status change for selected creators (select-all → approve/reject).
+  bulkStatus: (email, creatorIds, status) =>
+    req('POST', '/creator-discovery/watchlist/bulk-status', {
+      email, creator_ids: creatorIds, status,
+    }),
+
+  // One-off backfills for pre-existing data.
+  promoteProspects: (email) =>
+    req('POST', '/creator-discovery/watchlist/promote-prospects', { email }),
+  backfillPerspectives: (email) =>
+    req('POST', '/creator-discovery/watchlist/backfill-perspectives', { email }),
+
   // Existing dedicated micro-creator surfacing (10x-follower-ratio rule
   // computed server-side — not reimplemented here).
-  microCreators: (email, { page = 1, limit = 20, highPerforming, sortBy, source } = {}) => {
+  microCreators: (email, { page = 1, limit = 20, highPerforming, sortBy, source, perspective } = {}) => {
     const p = new URLSearchParams({ email, page: String(page), limit: String(limit) })
     if (highPerforming != null) p.set('high_performing', String(highPerforming))
     if (sortBy) p.set('sort_by', sortBy)
     if (source) p.set('source', source)
+    if (perspective) p.set('perspective', perspective)
     return req('GET', `/creator-discovery/micro-creators?${p.toString()}`)
   },
 }

@@ -28,10 +28,22 @@ export default function ViralRadar({ email }) {
 
   const [version, setVersion] = useState('v1')
   const [includeCompetitorMentions, setIncludeCompetitorMentions] = useState(false)
+  const [includeTiktok, setIncludeTiktok] = useState(false)
+  const [harvestDepth, setHarvestDepth] = useState('balanced')
+  const [highVolume, setHighVolume] = useState(false)
   const [starting, setStarting] = useState(false)
 
   const [run, setRun] = useState(null)
   const [runLoading, setRunLoading] = useState(false)
+
+  // Brand-wide accumulated creators (all runs) — the cumulative 500-600 pool.
+  const [watchlist, setWatchlist] = useState({ creators: [], total: 0 })
+  const [wlLoading, setWlLoading] = useState(false)
+  const [creatorScope, setCreatorScope] = useState('all') // all | run
+
+  // Selection for bulk approve/reject.
+  const [selected, setSelected] = useState(() => new Set())
+  const [bulkBusy, setBulkBusy] = useState(false)
 
   const [videos, setVideos] = useState([])
   const [videosLoading, setVideosLoading] = useState(false)
@@ -69,15 +81,40 @@ export default function ViralRadar({ email }) {
   const loadMicro = useCallback(async () => {
     if (!email) return
     setMicroLoading(true)
-    const r = await viralRadar.microCreators(email, { limit: 50, highPerforming: microHighPerforming || undefined })
+    const r = await viralRadar.microCreators(email, {
+      limit: 50,
+      highPerforming: microHighPerforming || undefined,
+      perspective: perspectiveFilter || undefined,
+    })
     if (r.success) setMicro({ data: r.data?.creators || r.data || [], meta: r.meta || {} })
     else show(r.message || 'Failed to load micro-creators', 'error')
     setMicroLoading(false)
-  }, [email, microHighPerforming])
+  }, [email, microHighPerforming, perspectiveFilter])
+
+  // Brand-wide creators (server-side platform/perspective filters).
+  const loadWatchlist = useCallback(async () => {
+    if (!email) return
+    setWlLoading(true)
+    const r = await viralRadar.watchlist(email, {
+      limit: 200,
+      platform: platformFilter || undefined,
+      perspective: perspectiveFilter || undefined,
+    })
+    if (r.success) {
+      setWatchlist({
+        creators: r.data?.creators || [],
+        total: r.data?.overview?.total_creators ?? (r.data?.creators || []).length,
+      })
+    } else show(r.message || 'Failed to load creators', 'error')
+    setWlLoading(false)
+  }, [email, platformFilter, perspectiveFilter])
 
   useEffect(() => { loadRun() }, [loadRun])
   useEffect(() => { loadVideos() }, [loadVideos])
   useEffect(() => { if (view === 'micro') loadMicro() }, [view, loadMicro])
+  useEffect(() => {
+    if (view === 'creators' && creatorScope === 'all') loadWatchlist()
+  }, [view, creatorScope, loadWatchlist])
 
   // Live updates: the backend emits every industry_discovery_* event under a
   // single 'live_progress' socket event (room = email), with the real event
@@ -97,6 +134,7 @@ export default function ViralRadar({ email }) {
         setLiveStep(null)
         loadRun()
         loadVideos()
+        loadWatchlist()
         show('Discovery run completed.')
       } else if (eventName === 'industry_discovery_error') {
         setLiveStep(null)
@@ -108,11 +146,16 @@ export default function ViralRadar({ email }) {
 
     sock.on('live_progress', onLiveProgress)
     return () => sock.off('live_progress', onLiveProgress)
-  }, [email, loadRun, loadVideos, show])
+  }, [email, loadRun, loadVideos, loadWatchlist, show])
 
   async function startRun() {
     setStarting(true)
-    const r = await viralRadar.startRun(email, version, includeCompetitorMentions)
+    const r = await viralRadar.startRun(email, version, {
+      includeCompetitorMentions,
+      includeTiktok,
+      harvestDepth: harvestDepth !== 'balanced' ? harvestDepth : null,
+      highVolume,
+    })
     if (r.success) {
       show(r.data?.message || 'Discovery run started.')
       setTimeout(loadRun, 2000)
@@ -122,6 +165,20 @@ export default function ViralRadar({ email }) {
     setStarting(false)
   }
 
+  async function bulkSetStatus(status) {
+    if (!selected.size) return
+    setBulkBusy(true)
+    const r = await viralRadar.bulkStatus(email, Array.from(selected), status)
+    if (r.success) {
+      show(`${r.data?.updated ?? selected.size} creators → ${status}`)
+      setSelected(new Set())
+      loadWatchlist()
+    } else {
+      show(r.message || 'Bulk update failed', 'error')
+    }
+    setBulkBusy(false)
+  }
+
   // Perspective options: union of the run's declared perspectives (v2/v3) and
   // whatever perspective tags actually appear on fetched videos (covers v1's
   // reserved perspectives + "Creators Talking About Competitors").
@@ -129,8 +186,9 @@ export default function ViralRadar({ email }) {
     const names = new Set()
     for (const p of run?.perspectives || []) if (p?.name) names.add(p.name)
     for (const v of videos) if (v.perspective) names.add(v.perspective)
+    for (const c of watchlist.creators) for (const p of c.perspectives || []) names.add(p)
     return Array.from(names).sort()
-  }, [run, videos])
+  }, [run, videos, watchlist.creators])
 
   const platformOptions = useMemo(() => {
     const names = new Set()
@@ -157,20 +215,45 @@ export default function ViralRadar({ email }) {
     return map
   }, [videos])
 
-  const creators = run?.creator_candidates || []
+  const creators = creatorScope === 'all'
+    ? watchlist.creators
+    : (run?.creator_candidates || [])
   const filteredCreators = useMemo(() => {
     let rows = creators
-    if (platformFilter) rows = rows.filter(c => c.platform === platformFilter)
-    if (perspectiveFilter) {
-      rows = rows.filter(c => {
-        const handle = (c.creator_handle || '').toLowerCase()
-        return perspectivesByCreator[handle]?.has(perspectiveFilter)
-      })
+    if (creatorScope !== 'all') {
+      // Brand-wide rows arrive server-filtered; per-run rows filter here.
+      if (platformFilter) rows = rows.filter(c => c.platform === platformFilter)
+      if (perspectiveFilter) {
+        rows = rows.filter(c => {
+          if ((c.perspectives || []).includes(perspectiveFilter)) return true
+          const handle = (c.creator_handle || '').toLowerCase()
+          return perspectivesByCreator[handle]?.has(perspectiveFilter)
+        })
+      }
     }
     const sorted = [...rows]
     sorted.sort((a, b) => (Number(b[creatorSort]) || 0) - (Number(a[creatorSort]) || 0))
     return sorted
-  }, [creators, platformFilter, perspectiveFilter, perspectivesByCreator, creatorSort])
+  }, [creators, creatorScope, platformFilter, perspectiveFilter, perspectivesByCreator, creatorSort])
+
+  const allSelected = filteredCreators.length > 0
+    && filteredCreators.every(c => selected.has(c.id))
+  function toggleSelectAll() {
+    setSelected(prev => {
+      if (allSelected) return new Set()
+      const next = new Set(prev)
+      for (const c of filteredCreators) next.add(c.id)
+      return next
+    })
+  }
+  function toggleSelect(id) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   return (
     <div>
@@ -197,10 +280,31 @@ export default function ViralRadar({ email }) {
             />
             Include "Creators Talking About Competitors"
           </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#cbd5e1' }}>
+            <input
+              type="checkbox"
+              checked={includeTiktok}
+              onChange={e => setIncludeTiktok(e.target.checked)}
+            />
+            Include TikTok
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#cbd5e1' }}>
+            <input
+              type="checkbox"
+              checked={highVolume}
+              onChange={e => setHighVolume(e.target.checked)}
+            />
+            High-volume creator mode
+          </label>
+          <select className="select" value={harvestDepth} onChange={e => setHarvestDepth(e.target.value)} title="Harvest depth">
+            <option value="balanced">Depth: Balanced</option>
+            <option value="deep">Depth: Deep</option>
+            <option value="exhaustive">Depth: Exhaustive</option>
+          </select>
           <button className="btn btn-primary btn-sm" onClick={startRun} disabled={starting}>
             {starting ? <span className="spinner" /> : `Run ${version.toUpperCase()} Discovery`}
           </button>
-          <button className="btn btn-outline btn-sm" onClick={() => { loadRun(); loadVideos() }} disabled={runLoading || videosLoading}>
+          <button className="btn btn-outline btn-sm" onClick={() => { loadRun(); loadVideos(); loadWatchlist() }} disabled={runLoading || videosLoading}>
             Refresh
           </button>
         </div>
@@ -255,8 +359,20 @@ export default function ViralRadar({ email }) {
       {/* ── Creators view ── */}
       {view === 'creators' && (
         <div className="card">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <div className="card-title" style={{ marginBottom: 0 }}>Creators</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div className="card-title" style={{ marginBottom: 0 }}>Creators</div>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button
+                  className={`btn btn-sm ${creatorScope === 'all' ? 'btn-primary' : 'btn-outline'}`}
+                  onClick={() => setCreatorScope('all')}
+                >All ({watchlist.total})</button>
+                <button
+                  className={`btn btn-sm ${creatorScope === 'run' ? 'btn-primary' : 'btn-outline'}`}
+                  onClick={() => setCreatorScope('run')}
+                >This run</button>
+              </div>
+            </div>
             <select className="select" value={creatorSort} onChange={e => setCreatorSort(e.target.value)}>
               <option value="follower_count">Sort: Followers</option>
               <option value="avg_views">Sort: Avg Views</option>
@@ -264,20 +380,49 @@ export default function ViralRadar({ email }) {
               <option value="best_breakout_score">Sort: Breakout Score</option>
             </select>
           </div>
-          {runLoading && <div style={{ color: '#64748b', fontSize: 13 }}>Loading…</div>}
-          {!runLoading && filteredCreators.length === 0 && (
-            <div style={{ color: '#64748b', fontSize: 13 }}>No creators found for this run/filter.</div>
+
+          {/* Selection toolbar: select-all + bulk approve/reject */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#cbd5e1' }}>
+              <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} />
+              Select all ({filteredCreators.length})
+            </label>
+            {selected.size > 0 && (
+              <>
+                <span style={{ fontSize: 12, color: '#94a3b8' }}>{selected.size} selected</span>
+                <button className="btn btn-primary btn-sm" disabled={bulkBusy} onClick={() => bulkSetStatus('saved')}>
+                  {bulkBusy ? <span className="spinner" /> : 'Approve → Saved'}
+                </button>
+                <button className="btn btn-outline btn-sm" disabled={bulkBusy} onClick={() => bulkSetStatus('rejected')}>
+                  Reject
+                </button>
+                <button className="btn btn-ghost btn-sm" onClick={() => setSelected(new Set())}>Clear</button>
+              </>
+            )}
+          </div>
+
+          {(runLoading || wlLoading) && <div style={{ color: '#64748b', fontSize: 13 }}>Loading…</div>}
+          {!(runLoading || wlLoading) && filteredCreators.length === 0 && (
+            <div style={{ color: '#64748b', fontSize: 13 }}>No creators found for this scope/filter.</div>
           )}
           <div style={{ display: 'grid', gap: 8 }}>
             {filteredCreators.map(c => {
               const handle = (c.creator_handle || '').toLowerCase()
-              const seenPerspectives = Array.from(perspectivesByCreator[handle] || [])
+              const seenPerspectives = (c.perspectives && c.perspectives.length)
+                ? c.perspectives
+                : Array.from(perspectivesByCreator[handle] || [])
               const isMicro = c.follower_count != null && c.follower_count < 1000
               return (
                 <div key={c.id} style={{
                   display: 'flex', gap: 12, alignItems: 'center', background: '#0f172a',
                   padding: 10, borderRadius: 6, border: '1px solid #1e293b',
                 }}>
+                  <input
+                    type="checkbox"
+                    checked={selected.has(c.id)}
+                    onChange={() => toggleSelect(c.id)}
+                    style={{ flexShrink: 0 }}
+                  />
                   {c.avatar_url
                     ? <img src={c.avatar_url} alt="" style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
                     : <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#1e293b', flexShrink: 0 }} />
@@ -287,6 +432,12 @@ export default function ViralRadar({ email }) {
                       <span style={{ fontWeight: 600, color: '#e2e8f0' }}>{c.display_name || c.creator_handle}</span>
                       <span style={{ fontSize: 11, color: '#64748b' }}>{c.platform}</span>
                       {isMicro && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: '#7c3aed', color: '#fff' }}>micro</span>}
+                      {c.status && c.status !== 'candidate' && (
+                        <span style={{
+                          fontSize: 10, padding: '1px 6px', borderRadius: 8, color: '#fff',
+                          background: c.status === 'saved' ? '#10b981' : c.status === 'rejected' ? '#dc2626' : '#0369a1',
+                        }}>{c.status}</span>
+                      )}
                     </div>
                     <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
                       {(c.follower_count ?? 0).toLocaleString()} followers · {(c.avg_views ?? 0).toLocaleString()} avg views
@@ -405,6 +556,11 @@ export default function ViralRadar({ email }) {
                     {(c.follower_count ?? 0).toLocaleString()} followers · {c.videos_count} videos tracked
                     {c.creator_score != null && <> · score {c.creator_score}</>}
                   </div>
+                  {(c.perspectives || []).length > 0 && (
+                    <div style={{ marginTop: 6, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      {c.perspectives.map(p => <PerspectiveBadge key={p} name={p} />)}
+                    </div>
+                  )}
                 </div>
                 {c.profile_url && (
                   <a className="report-link" href={c.profile_url} target="_blank" rel="noreferrer">↗ Profile</a>
