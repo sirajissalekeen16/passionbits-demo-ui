@@ -23,6 +23,22 @@ function PerspectiveBadge({ name }) {
   )
 }
 
+const MARKET_BADGE = {
+  brand_country: { label: 'Brand country', bg: '#065f46' },
+  unclear: { label: 'Unclear market', bg: '#78350f' },
+  other_market: { label: 'Other market', bg: '#475569' },
+}
+
+function MarketBadge({ label }) {
+  const meta = MARKET_BADGE[label] || MARKET_BADGE.unclear
+  return (
+    <span style={{
+      display: 'inline-block', padding: '1px 6px', borderRadius: 8, fontSize: 10,
+      fontWeight: 500, color: '#fff', background: meta.bg, whiteSpace: 'nowrap',
+    }}>{meta.label}</span>
+  )
+}
+
 export default function ViralRadar({ email }) {
   const { show, Toast } = useToast()
 
@@ -56,6 +72,7 @@ export default function ViralRadar({ email }) {
   const [view, setView] = useState('creators') // creators | videos | micro
   const [platformFilter, setPlatformFilter] = useState('')
   const [perspectiveFilter, setPerspectiveFilter] = useState('')
+  const [marketFilter, setMarketFilter] = useState('') // '' | brand_country | unclear | other_market
   const [creatorSort, setCreatorSort] = useState('follower_count')
 
   const [liveStep, setLiveStep] = useState(null)
@@ -99,6 +116,7 @@ export default function ViralRadar({ email }) {
       limit: 200,
       platform: platformFilter || undefined,
       perspective: perspectiveFilter || undefined,
+      market: marketFilter || undefined,
     })
     if (r.success) {
       setWatchlist({
@@ -107,7 +125,7 @@ export default function ViralRadar({ email }) {
       })
     } else show(r.message || 'Failed to load creators', 'error')
     setWlLoading(false)
-  }, [email, platformFilter, perspectiveFilter])
+  }, [email, platformFilter, perspectiveFilter, marketFilter])
 
   useEffect(() => { loadRun() }, [loadRun])
   useEffect(() => { loadVideos() }, [loadVideos])
@@ -200,8 +218,9 @@ export default function ViralRadar({ email }) {
     let rows = videos
     if (platformFilter) rows = rows.filter(v => v.platform === platformFilter)
     if (perspectiveFilter) rows = rows.filter(v => v.perspective === perspectiveFilter)
+    if (marketFilter) rows = rows.filter(v => (v.market_label || 'unclear') === marketFilter)
     return rows
-  }, [videos, platformFilter, perspectiveFilter])
+  }, [videos, platformFilter, perspectiveFilter, marketFilter])
 
   // Cross-reference: which perspectives has each creator handle's videos appeared under.
   const perspectivesByCreator = useMemo(() => {
@@ -230,11 +249,17 @@ export default function ViralRadar({ email }) {
           return perspectivesByCreator[handle]?.has(perspectiveFilter)
         })
       }
+      if (marketFilter) {
+        rows = rows.filter(c => {
+          const labels = c.market_labels || (c.market_label ? [c.market_label] : [])
+          return labels.includes(marketFilter)
+        })
+      }
     }
     const sorted = [...rows]
     sorted.sort((a, b) => (Number(b[creatorSort]) || 0) - (Number(a[creatorSort]) || 0))
     return sorted
-  }, [creators, creatorScope, platformFilter, perspectiveFilter, perspectivesByCreator, creatorSort])
+  }, [creators, creatorScope, platformFilter, perspectiveFilter, marketFilter, perspectivesByCreator, creatorSort])
 
   const allSelected = filteredCreators.length > 0
     && filteredCreators.every(c => selected.has(c.id))
@@ -335,8 +360,14 @@ export default function ViralRadar({ email }) {
             <option value="">All perspectives</option>
             {perspectiveOptions.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
-          {(platformFilter || perspectiveFilter) && (
-            <button className="btn btn-ghost btn-sm" onClick={() => { setPlatformFilter(''); setPerspectiveFilter('') }}>
+          <select className="select" value={marketFilter} onChange={e => setMarketFilter(e.target.value)} title="Market (label, not a filter on discovery)">
+            <option value="">All markets</option>
+            <option value="brand_country">Brand country</option>
+            <option value="unclear">Unclear</option>
+            <option value="other_market">Other market</option>
+          </select>
+          {(platformFilter || perspectiveFilter || marketFilter) && (
+            <button className="btn btn-ghost btn-sm" onClick={() => { setPlatformFilter(''); setPerspectiveFilter(''); setMarketFilter('') }}>
               Clear filters
             </button>
           )}
@@ -438,6 +469,9 @@ export default function ViralRadar({ email }) {
                           background: c.status === 'saved' ? '#10b981' : c.status === 'rejected' ? '#dc2626' : '#0369a1',
                         }}>{c.status}</span>
                       )}
+                      {(c.market_label || (c.market_labels || [])[0]) && (
+                        <MarketBadge label={c.market_label || (c.market_labels || [])[0]} />
+                      )}
                     </div>
                     <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
                       {(c.follower_count ?? 0).toLocaleString()} followers · {(c.avg_views ?? 0).toLocaleString()} avg views
@@ -494,6 +528,7 @@ export default function ViralRadar({ email }) {
                 <div style={{ padding: 8 }}>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
                     <PerspectiveBadge name={v.perspective} />
+                    {v.market_label && <MarketBadge label={v.market_label} />}
                     {v.competitor_mentioned && (
                       <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 8, background: '#0369a1', color: '#fff' }}>
                         vs {v.competitor_mentioned}

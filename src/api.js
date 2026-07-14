@@ -421,12 +421,13 @@ export const viralRadar = {
 
   // Brand-wide accumulated creators (CreatorWatchlist across ALL runs) with
   // per-creator perspectives — the cumulative pool, not just the latest run.
-  watchlist: (email, { page = 1, limit = 100, status, includeRejected, platform, perspective, microOnly } = {}) => {
+  watchlist: (email, { page = 1, limit = 100, status, includeRejected, platform, perspective, market, microOnly } = {}) => {
     const p = new URLSearchParams({ email, page: String(page), limit: String(limit) })
     if (status) p.set('status', status)
     if (includeRejected) p.set('include_rejected', 'true')
     if (platform) p.set('platform', platform)
     if (perspective) p.set('perspective', perspective)
+    if (market) p.set('market', market)
     if (microOnly) p.set('micro_only', 'true')
     return req('GET', `/creator-discovery/watchlist?${p.toString()}`)
   },
