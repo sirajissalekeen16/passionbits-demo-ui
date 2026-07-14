@@ -5,11 +5,15 @@ const _joined = new Set()
 
 export function getSocket() {
   if (!_socket) {
+    // Same base as api.js: VITE_API_BASE_URL for a cross-origin backend
+    // (e.g. dev-ai-backend-v2.passionbits.io), falling back to same-origin
+    // for deployments still behind an nginx proxy.
+    const base = import.meta.env.VITE_API_BASE_URL || window.location.origin
     // Polling first, then upgrade to WebSocket if nginx supports the Upgrade
     // header. Without this order, environments where nginx is missing the
     // websocket upgrade config spam the console with reconnect-loop errors
     // every few seconds even though long-polling actually works.
-    _socket = io(window.location.origin, {
+    _socket = io(base, {
       path: '/socket.io',
       transports: ['polling', 'websocket'],
       upgrade: true,
